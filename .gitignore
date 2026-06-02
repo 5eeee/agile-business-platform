@@ -22,3 +22,6 @@ test.json
 # Дампы PostgreSQL (не коммитить)
 backups/*.sql
 backups/*.sql.gz
+
+.cursor/
+.cursor

@@ -1,5 +1,9 @@
 # Agile.Workspace
 
+> **Полная техническая документация:** [docs/TECHNICAL.md](docs/TECHNICAL.md) · **GitHub:** [github.com/5eeee/agile-business-platform](https://github.com/5eeee/agile-business-platform)
+
+Enterprise-платформа Agile Business: проекты, обучение, геймификация.
+
 ## Быстрый старт (локально)
 
 1. **Зависимости:** в корне репозитория выполните `npm run setup` (корневой `npm install` + `client-new`).
