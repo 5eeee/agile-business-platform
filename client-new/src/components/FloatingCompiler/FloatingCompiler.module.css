@@ -1,0 +1,207 @@
+/* ===== FLOATING CODE PANEL ===== */
+.floatingBtn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 900;
+  height: 46px;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%);
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  box-shadow: 0 4px 20px rgba(37, 99, 235, 0.4);
+  transition: transform 0.2s, box-shadow 0.2s;
+  font-weight: 600;
+  font-size: 13px;
+}
+.floatingBtn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 28px rgba(37, 99, 235, 0.55);
+}
+
+/* ===== PANEL ===== */
+.panel {
+  position: fixed;
+  top: 56px;
+  right: 0;
+  bottom: 0;
+  width: 50vw;
+  z-index: 800;
+  background: var(--color-bg, #fff);
+  border-left: 1px solid var(--color-border, #e5e7eb);
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.08);
+  animation: slideIn 0.25s ease-out;
+}
+@keyframes slideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+  background: var(--color-bg-secondary, #f8fafc);
+  min-height: 44px;
+  flex-shrink: 0;
+}
+.panelTitle {
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text, #0f172a);
+}
+.closeBtn {
+  padding: 6px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 6px;
+  color: var(--color-text-secondary, #64748b);
+  transition: background 0.15s, color 0.15s;
+  display: flex;
+  align-items: center;
+}
+.closeBtn:hover {
+  background: var(--color-border, #e5e7eb);
+  color: var(--color-text, #0f172a);
+}
+
+.panelBody {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ===== LANG BAR ===== */
+.langBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.langBtns {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.langChip {
+  padding: 3px 10px;
+  border: 1px solid #555;
+  border-radius: 5px;
+  background: transparent;
+  color: #ccc;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.langChip:hover { background: #3c3c3c; color: #fff; }
+.langChipActive { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
+.runBtn {
+  padding: 5px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #16a34a;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s;
+}
+.runBtn:hover { background: #15803d; }
+.runBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ===== SPLIT: editor top / output bottom ===== */
+.editorWrap {
+  flex: 1 1 50%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.outputWrap {
+  flex: 1 1 50%;
+  min-height: 120px;
+  border-top: 1px solid #3c3c3c;
+  background: #1e1e1e;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.outputHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  flex-shrink: 0;
+}
+.outputLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: #ccc;
+}
+.badge { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 700; }
+.badgeOk { background: rgba(22,163,74,.15); color: #16a34a; }
+.badgeErr { background: rgba(220,38,38,.15); color: #dc2626; }
+.badgeTimeout { background: rgba(234,179,8,.15); color: #eab308; }
+.outputText {
+  flex: 1;
+  margin: 0;
+  padding: 10px 14px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: #d4d4d4;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.htmlPreview {
+  flex: 1;
+  border: none;
+  background: #fff;
+}
+.emptyOutput {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #555;
+  font-size: 12px;
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .panel {
+    width: 100vw;
+    top: 0;
+  }
+  .floatingBtn {
+    bottom: 16px;
+    right: 16px;
+    height: 42px;
+    padding: 0 12px;
+    font-size: 12px;
+  }
+}

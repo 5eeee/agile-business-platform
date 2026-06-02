@@ -1,0 +1,24 @@
+# node_modules/
+client/node_modules/
+client-new/node_modules/
+client-new/dist/
+client-new/playwright-report/
+client-new/test-results/
+client-new/blob-report/
+server/__pycache__/
+server/app/__pycache__/
+server/.env
+server/database.sqlite
+*.pyc
+.venv/
+.venv-*/
+.env
+ssl/
+test.json
+.env.deploy
+.env.production
+*.pem
+
+# Дампы PostgreSQL (не коммитить)
+backups/*.sql
+backups/*.sql.gz

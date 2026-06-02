@@ -1,0 +1,19 @@
+{
+  "name": "agile-business",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "setup": "npm install && cd client-new && npm install",
+    "start": "concurrently -n web,api -c cyan,magenta \"npm run client:dev\" \"npm run server:dev\"",
+    "dev": "npm run start",
+    "client:dev": "cd client-new && npm run dev",
+    "client:build": "cd client-new && npm run build",
+    "server:dev": "node scripts/run-server.mjs",
+    "verify": "node scripts/verify.mjs",
+    "deploy": "powershell -File deploy.ps1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0"
+  }
+}

@@ -1,0 +1,166 @@
+.player {
+  position: fixed;
+  bottom: 0;
+  left: var(--sidebar-width, 240px);
+  right: 0;
+  height: 56px;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  z-index: 200;
+  gap: 16px;
+}
+
+/* Track info */
+.info {
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  max-width: 220px;
+  overflow: hidden;
+}
+.title {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.artist {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Controls */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ctrlBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.ctrlBtn:hover {
+  background: var(--color-hover);
+}
+.playBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: var(--color-primary);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s;
+}
+.playBtn:hover {
+  opacity: 0.85;
+}
+
+/* Progress bar */
+.progress {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.time {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  min-width: 36px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-border-light);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+.barFill {
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: 2px;
+  transition: width 0.1s linear;
+}
+
+/* Volume */
+.volume {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-muted);
+}
+.volSlider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 70px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-border-light);
+  outline: none;
+  cursor: pointer;
+}
+.volSlider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  cursor: pointer;
+}
+.volSlider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  cursor: pointer;
+  border: none;
+}
+
+/* Playlist name badge */
+.plBadge {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  background: var(--color-bg-tertiary);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .player {
+    left: 0;
+    padding: 0 10px;
+    gap: 8px;
+  }
+  .info {
+    min-width: 80px;
+    max-width: 120px;
+  }
+  .volume, .plBadge {
+    display: none;
+  }
+}

@@ -1,0 +1,70 @@
+.layout {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.main {
+  flex: 1;
+  margin-left: var(--sidebar-width);
+  padding: 28px 32px;
+  max-width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.mainExpanded {
+  margin-left: 0;
+}
+
+.mainSidebarNarrow {
+  margin-left: var(--sidebar-width-narrow);
+}
+
+.sidebarOpenBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .main {
+    margin-left: 0;
+    padding: 16px;
+  }
+}
+
+:global([dir="rtl"]) .main {
+  margin-left: 0;
+  margin-right: var(--sidebar-width);
+}
+
+:global([dir="rtl"]) .mainSidebarNarrow {
+  margin-left: 0;
+  margin-right: var(--sidebar-width-narrow);
+}
+
+:global([dir="rtl"]) .mainExpanded {
+  margin-right: 0;
+}
+
+@media (max-width: 768px) {
+  :global([dir="rtl"]) .main {
+    margin-right: 0;
+  }
+}

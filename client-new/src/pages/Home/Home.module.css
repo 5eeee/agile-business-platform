@@ -1,0 +1,217 @@
+.page {
+  max-width: 960px;
+}
+
+.greeting {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-bottom: 24px;
+}
+
+.eventBanner {
+  background: var(--color-primary-light);
+  border: 1px solid rgba(229, 57, 53, 0.15);
+  border-radius: var(--radius-md);
+  padding: 20px 24px;
+  margin-bottom: 28px;
+}
+
+.eventInfo h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--color-primary);
+  letter-spacing: -0.01em;
+}
+
+.eventInfo p {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-bottom: 3px;
+}
+
+.eventActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.eventParticipants {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.grid h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 14px;
+  letter-spacing: -0.01em;
+}
+
+.quickActions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.progressBar {
+  height: 6px;
+  background: var(--color-border-light);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.statsRow {
+  display: flex;
+  gap: 16px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.stat strong {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+.stat span {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.tipsList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tipItem {
+  padding: 8px 12px;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.updates {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.updateItem {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.updateItem strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.updateItem p {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin: 2px 0;
+}
+
+.updateItem small {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.empty {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 20px;
+}
+
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .statsRow {
+    gap: 8px;
+  }
+
+  .stat strong {
+    font-size: 16px;
+  }
+
+  .page {
+    padding: 0 4px;
+  }
+
+  .eventActions {
+    flex-wrap: wrap;
+  }
+}
+
+.tipsList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tipItem {
+  font-size: 13px;
+  padding: 8px 10px;
+  background: var(--color-hover);
+  border-radius: var(--radius-sm);
+  line-height: 1.5;
+}
+
+.updates {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.updateItem {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border-light);
+}
+.updateItem strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.updateItem p {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+.updateItem small {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.empty {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,330 @@
+.page {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pageHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin: 0 0 4px;
+}
+
+.title {
+  margin: 0;
+  font-size: 26px;
+}
+
+.muted {
+  color: var(--color-text-secondary);
+  max-width: 520px;
+  margin-top: 6px;
+}
+
+.balanceCard {
+  min-width: 220px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-secondary);
+  box-shadow: 0 4px 16px var(--color-shadow);
+}
+
+.balanceLabel {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.balanceValue {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 4px 0;
+}
+
+.balanceMeta {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.alertError {
+  background: rgba(239, 68, 68, 0.12);
+  color: #b91c1c;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+}
+
+.alertSuccess {
+  background: rgba(16, 185, 129, 0.12);
+  color: #0f5132;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+}
+
+.adminPanel {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  background: var(--color-surface);
+  box-shadow: 0 4px 12px var(--color-shadow);
+}
+
+.panelHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.panelTitle { font-weight: 700; }
+
+.panelActions { display: flex; gap: 8px; }
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.formField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.formField input,
+.formField textarea,
+.formField select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.checkboxField {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 18px;
+}
+@media (max-width: 640px) {
+  .grid { grid-template-columns: 1fr; gap: 14px; }
+  .card { padding: 14px; }
+}
+
+.card {
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 16px;
+  background: var(--color-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 4px 16px var(--color-shadow);
+  transition: transform .2s, box-shadow .2s;
+}
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px var(--color-shadow);
+}
+.card[data-category="status"] { border-color: rgba(201,162,39,.35); background: linear-gradient(145deg, #fff 0%, #fefcf5 100%); }
+.card[data-category="status"] .cardIcon { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #b45309; }
+.card[data-category="badge"] { border-color: rgba(99,102,241,.3); background: linear-gradient(145deg, #fff 0%, #f5f3ff 100%); }
+.card[data-category="badge"] .cardIcon { background: linear-gradient(135deg, #e0e7ff, #c7d2fe); color: #4338ca; }
+.card[data-category="perk"] { border-color: rgba(16,185,129,.3); background: linear-gradient(145deg, #fff 0%, #f0fdf4 100%); }
+.card[data-category="perk"] .cardIcon { background: linear-gradient(135deg, #d1fae5, #a7f3d0); color: #047857; }
+.card:nth-child(6n+1)[data-category="status"] .cardIcon { background: linear-gradient(135deg, #fce7f3, #fbcfe8); color: #9d174d; }
+.card:nth-child(6n+2)[data-category="badge"] .cardIcon { background: linear-gradient(135deg, #dbeafe, #bfdbfe); color: #1d4ed8; }
+.card:nth-child(6n+3)[data-category="perk"] .cardIcon { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #b45309; }
+.card:nth-child(6n+4)[data-category="status"] .cardIcon { background: linear-gradient(135deg, #e0e7ff, #c7d2fe); color: #4f46e5; }
+.card:nth-child(6n+5)[data-category="badge"] .cardIcon { background: linear-gradient(135deg, #ddd6fe, #c4b5fd); color: #6d28d9; }
+
+.cardMuted {
+  opacity: 0.7;
+}
+
+.cardTop {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.cardIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--color-bg-secondary);
+  flex-shrink: 0;
+}
+
+.cardMeta { flex: 1; }
+.cardTitle { font-weight: 700; }
+.cardCategory {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.cardDesc { color: var(--color-text-secondary); margin: 0; }
+
+.cardImage {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-light);
+}
+
+.cardFooter {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.price { font-weight: 700; display: inline-flex; gap: 6px; align-items: center; }
+.stock { color: var(--color-text-muted); }
+.inactive { color: #b91c1c; display: inline-flex; gap: 4px; align-items: center; }
+
+.actions { display: flex; gap: 8px; }
+
+.empty {
+  padding: 14px;
+  text-align: center;
+  color: var(--color-text-muted);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.purchaseRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.purchaseTitle { font-weight: 600; }
+.purchaseDate { color: var(--color-text-muted); font-size: 12px; }
+.purchasePrice { font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
+
+.levelBadge {
+  margin-top: 8px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #9a3412;
+}
+
+.rarityFilters { display: flex; gap: 6px; flex-wrap: wrap; }
+.rarityActive { background: var(--color-surface-alt) !important; border-color: var(--color-primary) !important; }
+
+.rarityTag {
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+.rarity_common { background: #f3f4f6; color: #374151; }
+.rarity_rare { background: #dbeafe; color: #1d4ed8; }
+.rarity_epic { background: #ede9fe; color: #6d28d9; }
+.rarity_legendary { background: #fef3c7; color: #b45309; }
+
+.achievementsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.achievementCard {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--color-surface);
+}
+
+.achievementUnlocked {
+  border-color: #10b981;
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.25) inset;
+}
+
+.achievementHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.achievementTitle {
+  margin-top: 8px;
+  font-weight: 700;
+}
+
+.achievementProgress {
+  margin-top: 6px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.progressBar {
+  margin-top: 8px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-bg-secondary);
+  overflow: hidden;
+}
+
+.progressBar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+}

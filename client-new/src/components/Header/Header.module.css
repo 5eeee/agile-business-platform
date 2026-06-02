@@ -1,0 +1,250 @@
+.header {
+  height: var(--header-height);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: opacity 0.2s;
+}
+.logo:hover { opacity: 0.8; }
+
+.logoImg {
+  height: 32px;
+  width: auto;
+  display: block;
+  transition: opacity 0.2s;
+}
+
+.projectSlot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0 12px;
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.langSwitch {
+  display: flex;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+
+.langBtn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  background: transparent;
+  color: var(--color-text-muted);
+  border: none;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.langActive {
+  background: var(--color-primary);
+  color: white;
+  box-shadow: 0 1px 3px rgba(229, 57, 53, 0.3);
+}
+
+.iconBtn {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+.iconBtn:hover {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+}
+.iconBtn svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.8;
+}
+
+.themeBtn {
+  composes: iconBtn;
+}
+
+.notifWrap {
+  position: relative;
+}
+
+.notifBtn {
+  composes: iconBtn;
+}
+
+.notifBadge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: var(--color-primary);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--color-surface);
+}
+
+.notifOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+}
+
+.notifDropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -8px;
+  width: 340px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 6px;
+  z-index: 100;
+  box-shadow: 0 12px 40px var(--color-shadow-lg);
+}
+
+.notifDropdown h4 {
+  padding: 10px 12px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  letter-spacing: -0.01em;
+}
+
+.notifEmpty {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  padding: 20px;
+  text-align: center;
+}
+
+.notifItem {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid transparent;
+  transition: background 0.15s;
+  cursor: default;
+}
+.notifItem:hover {
+  background: var(--color-bg-secondary);
+}
+.notifItem strong {
+  font-size: 13px;
+  font-weight: 500;
+  display: block;
+  margin-bottom: 2px;
+}
+.notifItem p {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+.notifItem small {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  margin-top: 4px;
+  display: block;
+}
+
+.adminBtn {
+  font-size: 12px !important;
+  padding: 5px 12px !important;
+  border-radius: var(--radius-sm) !important;
+  background: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+}
+
+.userInfo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: background 0.2s;
+}
+.userInfo:hover {
+  background: var(--color-bg-tertiary);
+}
+
+.userName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.coinBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.coinBtn:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-light);
+}
+.coinBtn svg { width: 16px; height: 16px; }
+
+.menuBtn {
+  composes: iconBtn;
+}
+
+@media (max-width: 768px) {
+  .header {
+    padding: 0 12px;
+  }
+  .logoText {
+    display: none;
+  }
+  .adminBtn {
+    display: none;
+  }
+}

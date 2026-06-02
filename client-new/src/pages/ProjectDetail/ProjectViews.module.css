@@ -1,0 +1,438 @@
+/* Gantt */
+.ganttWrap {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+  box-shadow: 0 4px 24px var(--color-shadow);
+}
+
+.ganttToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--color-border-light);
+  background: var(--color-bg-secondary);
+}
+
+.ganttScale {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.ganttNavBtn {
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  color: var(--color-text-secondary);
+}
+
+.ganttGrid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(200px, 38%);
+  gap: 0;
+  min-height: 280px;
+}
+
+@media (max-width: 900px) {
+  .ganttGrid {
+    grid-template-columns: 1fr;
+  }
+  .ganttTimeline {
+    display: none;
+  }
+}
+
+.ganttTable {
+  border-right: 1px solid var(--color-border-light);
+  overflow-x: auto;
+}
+
+.ganttHeadRow,
+.ganttTreeRow,
+.ganttDataRow {
+  display: grid;
+  grid-template-columns: 1fr 52px 120px 72px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.ganttHeadRow {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.ganttTreeRow {
+  background: rgba(59, 130, 246, 0.06);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.ganttDataRow {
+  position: relative;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.ganttDataRow:hover {
+  background: var(--color-hover);
+}
+
+.ganttTaskTitle {
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.ganttInitials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.ganttBarTrack {
+  grid-column: 1 / -1;
+  height: 10px;
+  background: var(--color-bg-tertiary);
+  border-radius: 4px;
+  margin-top: 4px;
+  position: relative;
+}
+
+.ganttBar {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #475569, #94a3b8);
+  min-width: 8px;
+}
+
+.ganttTimeline {
+  padding: 12px;
+  background: var(--color-bg-secondary);
+}
+
+.ganttTimelineHeader {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--color-text-secondary);
+}
+
+.ganttTimelineInner {
+  display: flex;
+  gap: 0;
+  height: 120px;
+  position: relative;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.ganttWeekCell {
+  flex: 1;
+  border-right: 1px solid var(--color-border-light);
+}
+.ganttWeekCell:last-child {
+  border-right: none;
+}
+
+.ganttTodayLine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-error);
+  z-index: 2;
+  pointer-events: none;
+}
+.ganttTodayLine::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-error);
+}
+
+/* Calendar */
+.calWrap {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+  box-shadow: 0 4px 24px var(--color-shadow);
+}
+
+.calToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.calRange {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.calNav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.calNavBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-tertiary);
+  color: var(--color-info);
+  cursor: pointer;
+}
+
+.calTodayBtn {
+  padding: 8px 14px;
+  font-size: 13px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-info);
+  color: #fff;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-weight: 500;
+}
+
+.calWeekNum {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.calGrid {
+  display: grid;
+  grid-template-columns: 56px repeat(7, 1fr);
+  grid-auto-rows: minmax(36px, auto);
+  overflow-x: auto;
+}
+
+.calCorner {
+  border-bottom: 1px solid var(--color-border-light);
+  border-right: 1px solid var(--color-border-light);
+  background: var(--color-bg-secondary);
+}
+
+.calDayHead {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--color-border-light);
+  border-right: 1px solid var(--color-border-light);
+  background: var(--color-bg-secondary);
+}
+
+.calDayShort {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+.calDayNum {
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.calDayToday .calDayNum {
+  background: var(--color-error);
+  color: #fff;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.calDayWeekend {
+  background: rgba(254, 202, 202, 0.25);
+}
+
+:global(html[data-theme='dark']) .calDayWeekend {
+  background: rgba(248, 113, 113, 0.07);
+}
+
+.calAllDayLabel {
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  border-right: 1px solid var(--color-border-light);
+  border-bottom: 1px solid var(--color-border-light);
+  display: flex;
+  align-items: center;
+}
+
+.calAllDayCell {
+  min-height: 40px;
+  padding: 4px;
+  border-right: 1px solid var(--color-border-light);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.calChip {
+  font-size: 11px;
+  padding: 4px 8px;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border-light);
+  color: var(--color-text);
+}
+
+.calTimeCol {
+  border-right: 1px solid var(--color-border-light);
+}
+
+.calHour {
+  height: 48px;
+  padding: 4px 8px 0;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  border-top: 1px solid var(--color-border-light);
+}
+
+.calDayColumn {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--color-border-light);
+}
+
+.calSlot {
+  height: 48px;
+  border-top: 1px solid var(--color-border-light);
+  position: relative;
+}
+
+.calSlotPlus {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--color-info);
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+/* Subtasks tab */
+.subtasksPanel {
+  padding: 4px 0;
+}
+
+.subtasksHint {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.subtasksHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.subtasksCount {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.subtasksBar {
+  height: 8px;
+  background: var(--color-bg-tertiary);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.subtasksBarFill {
+  height: 100%;
+  background: linear-gradient(90deg, #64748b, #94a3b8);
+  border-radius: 4px;
+}
+
+.subtasksEmpty {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-bottom: 16px;
+}
+
+.subtasksList {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.subtasksListItem {
+  font-size: 13px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--color-border-light);
+  color: var(--color-text);
+}
+
+.subtasksDone {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
+}
+
+.subtaskAdd {
+  border: none;
+  background: none;
+  color: var(--color-info);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  padding: 0;
+}
+
+.subtaskAdd:hover {
+  text-decoration: underline;
+}

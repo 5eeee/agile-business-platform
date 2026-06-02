@@ -1,0 +1,156 @@
+.page {
+  max-width: none;
+  width: 100%;
+  min-height: min(70vh, 720px);
+  display: flex;
+  flex-direction: column;
+}
+
+.hero {
+  position: relative;
+  border-radius: var(--radius-lg);
+  padding: 40px 36px 36px;
+  margin-bottom: 28px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #e8f4fc 0%, #f0f7ff 40%, #faf5ff 100%);
+  border: 1px solid rgba(59, 130, 246, 0.12);
+}
+
+[data-theme='dark'] .hero {
+  background: linear-gradient(135deg, #1a2332 0%, #1e1e2e 50%, #241a2e 100%);
+  border-color: rgba(99, 102, 241, 0.2);
+}
+
+.heroPattern {
+  position: absolute;
+  inset: 0;
+  opacity: 0.35;
+  background-image: radial-gradient(circle at 20% 30%, rgba(59, 130, 246, 0.15) 0%, transparent 45%),
+    radial-gradient(circle at 80% 70%, rgba(139, 92, 246, 0.12) 0%, transparent 40%);
+  pointer-events: none;
+}
+
+.heroInner {
+  position: relative;
+  z-index: 1;
+  max-width: 560px;
+}
+
+.heroTitle {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--color-text);
+  margin-bottom: 12px;
+  line-height: 1.2;
+}
+
+.heroSubtitle {
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--color-text-secondary);
+  margin-bottom: 22px;
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.quickSection {
+  margin-top: 8px;
+}
+
+.quickTitle {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: 14px;
+}
+
+.quickRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.quickCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  min-width: 200px;
+  flex: 1 1 220px;
+  max-width: 320px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-sans);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.quickCard:hover {
+  border-color: rgba(59, 130, 246, 0.35);
+  box-shadow: 0 4px 20px var(--color-shadow);
+}
+
+.quickCardIcon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--color-info);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.quickCardBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.quickCardName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quickCardMeta {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.empty {
+  color: var(--color-text-muted);
+  text-align: center;
+  padding: 48px 20px;
+  font-size: 14px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-secondary);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.formActions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}

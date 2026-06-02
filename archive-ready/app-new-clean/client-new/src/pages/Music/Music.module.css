@@ -1,0 +1,354 @@
+/* VK-style Music Page */
+.page {
+  padding: 0;
+  padding-bottom: 72px;
+}
+
+/* Top bar */
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.actions {
+  display: flex;
+  gap: 6px;
+}
+.actionBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.actionBtn:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+/* Search */
+.searchWrap {
+  position: relative;
+  margin-bottom: 20px;
+}
+.searchIcon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+.searchInput {
+  width: 100%;
+  padding: 10px 12px 10px 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+.searchInput:focus {
+  border-color: var(--color-primary);
+}
+.searchInput::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Create playlist */
+.createForm {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+}
+.createInput {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: var(--radius-xs, 6px);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 13px;
+  outline: none;
+}
+.createInput:focus {
+  border-color: var(--color-primary);
+}
+
+/* Section */
+.section {
+  margin-bottom: 28px;
+}
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.sectionTitle {
+  font-size: 16px;
+  font-weight: 600;
+}
+.countBadge {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+/* Track list */
+.trackList {
+  display: flex;
+  flex-direction: column;
+}
+.trackRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s;
+  position: relative;
+}
+.trackRow:hover {
+  background: var(--color-surface-hover, rgba(0,0,0,0.04));
+}
+.trackRow:hover .trackDel {
+  opacity: 1;
+}
+.trackRowActive {
+  background: var(--color-primary-light) !important;
+}
+
+/* Track thumbnail */
+.trackThumb {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-xs, 6px);
+  background: var(--color-bg-tertiary, #f0f0f0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+.trackRow:hover .playIcon {
+  color: var(--color-primary);
+}
+.trackRowActive .trackThumb {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+.playIcon {
+  transition: color 0.12s;
+}
+
+/* Equalizer bars animation */
+.eqBars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
+}
+.eqBars span {
+  display: block;
+  width: 3px;
+  background: var(--color-primary);
+  border-radius: 1px;
+  animation: eqPulse 0.6s ease-in-out infinite alternate;
+}
+.eqBars span:nth-child(1) { height: 8px; animation-delay: 0s; }
+.eqBars span:nth-child(2) { height: 14px; animation-delay: 0.15s; }
+.eqBars span:nth-child(3) { height: 10px; animation-delay: 0.3s; }
+
+@keyframes eqPulse {
+  0% { transform: scaleY(0.4); }
+  100% { transform: scaleY(1); }
+}
+
+/* Track meta */
+.trackMeta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.trackName {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.trackRowActive .trackName {
+  color: var(--color-primary);
+}
+.trackArtist {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.trackDur {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 36px;
+  text-align: right;
+}
+.trackDel {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 0.15s;
+}
+.trackDel:hover {
+  color: var(--color-error, #ef4444);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+/* Playlist grid */
+.plGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+.plCard {
+  background: var(--color-surface);
+  border-radius: var(--radius-md, 10px);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  position: relative;
+  border: 1px solid var(--color-border-light, var(--color-border));
+}
+.plCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+}
+.plCardActive {
+  border-color: var(--color-primary);
+}
+
+.plCover {
+  aspect-ratio: 1;
+  background: linear-gradient(135deg, var(--color-bg-tertiary, #f0f0f0) 0%, var(--color-bg-secondary, #e5e5e5) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.plCoverIcon {
+  color: var(--color-text-muted);
+  opacity: 0.4;
+}
+.plOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.plOverlay .eqBars span {
+  background: #fff;
+}
+
+.plCardBody {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.plCardName {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plCardSub {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.sysBadge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: 700;
+}
+.plCardDel {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.5);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+.plCard:hover .plCardDel {
+  display: flex;
+}
+
+/* Empty state */
+.empty {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 40px 0;
+}
+
+@media (max-width: 768px) {
+  .plGrid {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 8px;
+  }
+  .trackRow {
+    padding: 6px 8px;
+    gap: 8px;
+  }
+  .trackThumb {
+    width: 32px;
+    height: 32px;
+  }
+}

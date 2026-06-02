@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.env
+.env.*
+.git/
+.gitignore
+*.md
+test_*.py
+*.sqlite
+start.ps1
+start.bat

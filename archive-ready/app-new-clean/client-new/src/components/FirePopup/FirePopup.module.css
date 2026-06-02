@@ -1,0 +1,56 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+}
+
+.popup {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 52px 64px;
+  text-align: center;
+  max-width: 440px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4);
+}
+
+.sadFace {
+  font-size: 64px;
+  margin-bottom: 20px;
+}
+
+.message {
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.title {
+  font-size: 28px;
+  font-weight: 900;
+  color: var(--color-primary);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 24px;
+}
+
+.logoutBtn {
+  padding: 10px 32px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.logoutBtn:hover {
+  opacity: 0.9;
+}
