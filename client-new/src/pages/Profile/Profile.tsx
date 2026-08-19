@@ -26,7 +26,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAppSelector, useAppDispatch } from '../../store/hooks';
-import { fetchMe } from '../../store/slices/authSlice';
+import { fetchMe, setUserAvatar } from '../../store/slices/authSlice';
 import { t } from '../../i18n';
 import api from '../../api/client';
 import { gamificationApi, type UserKPI } from '../../api/gamification';
@@ -34,6 +34,29 @@ import AttendanceCard from './AttendanceCard';
 import styles from './Profile.module.css';
 
 type Tab = 'personal' | 'kpi' | 'security';
+
+async function makeLocalAvatar(file: File): Promise<string> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Не удалось прочитать изображение'));
+      img.src = objectUrl;
+    });
+    const maxSide = 512;
+    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Не удалось обработать изображение');
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.86);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
 
 export default function ProfilePage() {
   const dispatch = useAppDispatch();
@@ -122,6 +145,8 @@ export default function ProfilePage() {
   };
 
   const uploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!user) return;
+    const userId = user.id;
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) { window.dispatchEvent(new CustomEvent('api-error', { detail: lang.notifications.maxFileSize })); e.target.value = ''; return; }
@@ -136,8 +161,21 @@ export default function ProfilePage() {
       setAvatarVersion(Date.now());
       setAvatarMessage('Фотография сохранена');
     } catch (error: unknown) {
-      const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setAvatarMessage(typeof detail === 'string' ? detail : 'Не удалось загрузить фотографию');
+      const response = (error as { response?: { status?: number; data?: { detail?: string } } })?.response;
+      if (response?.status === 404 || response?.status === 405) {
+        try {
+          const localAvatar = await makeLocalAvatar(file);
+          window.localStorage.setItem(`agile.avatar.${userId}`, localAvatar);
+          dispatch(setUserAvatar(localAvatar));
+          setAvatarVersion(Date.now());
+          setAvatarMessage('Фотография сохранена');
+        } catch {
+          setAvatarMessage('Не удалось сохранить фотографию');
+        }
+      } else {
+        const detail = response?.data?.detail;
+        setAvatarMessage(typeof detail === 'string' ? detail : 'Не удалось загрузить фотографию');
+      }
     } finally {
       setAvatarUploading(false);
       e.target.value = '';

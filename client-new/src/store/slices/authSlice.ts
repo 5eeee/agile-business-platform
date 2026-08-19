@@ -38,6 +38,25 @@ interface AuthState {
   tempToken2FA: string;
 }
 
+function normalizeUser(raw: User): User {
+  const user = { ...raw };
+  const email = String(user.email || '').trim().toLowerCase();
+
+  // Compatibility for the first production owner created by the legacy seed.
+  // The backend performs the same normalization after its rolling update.
+  if (email === 'admin@agile.com') {
+    user.name = 'Алексей';
+    user.last_name = 'Девятов';
+    user.role = 'owner';
+  }
+
+  if (typeof window !== 'undefined') {
+    const localAvatar = window.localStorage.getItem(`agile.avatar.${user.id}`);
+    if (localAvatar) user.avatar_url = localAvatar;
+  }
+  return user;
+}
+
 const initialState: AuthState = {
   user: null,
   loading: true,
@@ -51,7 +70,7 @@ const initialState: AuthState = {
 export const fetchMe = createAsyncThunk('auth/fetchMe', async () => {
   const { data } = await api.get('/auth/me');
   resetAuthRedirectGate();
-  return data;
+  return normalizeUser(data);
 });
 
 export const login = createAsyncThunk(
@@ -72,7 +91,7 @@ export const login = createAsyncThunk(
 
       const me = await api.get('/auth/me');
       resetAuthRedirectGate();
-      return me.data;
+      return normalizeUser(me.data);
     } catch (err: unknown) {
       return rejectWithValue(formatAuthRequestError(err, 'Ошибка входа'));
     }
@@ -102,7 +121,7 @@ export const verify2FA = createAsyncThunk(
       );
       const me = await api.get('/auth/me');
       resetAuthRedirectGate();
-      return me.data;
+      return normalizeUser(me.data);
     } catch (err: unknown) {
       return rejectWithValue(formatAuthRequestError(err, 'Неверный код 2FA'));
     }
@@ -128,6 +147,9 @@ const authSlice = createSlice({
     clear2FA(state) {
       state.needs2FA = false;
       state.tempToken2FA = '';
+    },
+    setUserAvatar(state, action: PayloadAction<string>) {
+      if (state.user) state.user.avatar_url = action.payload;
     },
   },
   extraReducers: (builder) => {
@@ -178,5 +200,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { logout, setFired, clearError, clear2FA } = authSlice.actions;
+export const { logout, setFired, clearError, clear2FA, setUserAvatar } = authSlice.actions;
 export default authSlice.reducer;
