@@ -6,6 +6,25 @@ const api = axios.create({
   withCredentials: true,
 });
 
+/** После успешного редиректа на /login флаг остаётся true до сброса — см. resetAuthRedirectGate */
+let authRedirectScheduled = false;
+
+/**
+ * Сбросить «замок» редиректа (после успешного входа /auth/me без перезагрузки страницы).
+ * Вызывать из authSlice при fulfilled login / fetchMe / verify2FA.
+ */
+export function resetAuthRedirectGate(): void {
+  authRedirectScheduled = false;
+}
+
+function scheduleAuthRedirect(): void {
+  if (typeof window === 'undefined') return;
+  if (window.location.hash.startsWith('#/login')) return;
+  if (authRedirectScheduled) return;
+  authRedirectScheduled = true;
+  window.location.replace('/#/login');
+}
+
 // Автоматически ставим Content-Type: application/json только для не-FormData
 api.interceptors.request.use((config) => {
   if (!(config.data instanceof FormData)) {
@@ -33,42 +52,69 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    
-    if (error.response?.status === 401) {
-      // Не пытаться обновлять токен для самой операции refresh.
-      if ((originalRequest as any)?._skipAuthRefresh) {
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
-        }
+    if (!originalRequest) {
+      return Promise.reject(error);
+    }
+
+    const status = error.response?.status;
+    const req = originalRequest as any;
+
+    if (status === 401) {
+      // Не трогаем refresh/редирект: разгрузка сессии, выход, ошибки на странице логина и т.п.
+      if (req._silent401) {
         return Promise.reject(error);
       }
 
-      if (!originalRequest._retry) {
-        originalRequest._retry = true;
-        try {
-          await ensureRefreshed();
-          return api(originalRequest);
-        } catch (refreshError) {
-          if (window.location.pathname !== '/login') {
-            window.location.href = '/login';
-          }
-          return Promise.reject(refreshError);
-        }
+      // Сама операция refresh: при провале — один редирект на логин (не дублировать десятками запросов).
+      if (req._skipAuthRefresh) {
+        scheduleAuthRedirect();
+        return Promise.reject(error);
+      }
+
+      // Уже был retry после refresh — снова 401, не крутим refresh по кругу.
+      if (req._retry) {
+        scheduleAuthRedirect();
+        return Promise.reject(error);
+      }
+
+      req._retry = true;
+      try {
+        await ensureRefreshed();
+        return api(originalRequest);
+      } catch (refreshError) {
+        scheduleAuthRedirect();
+        return Promise.reject(refreshError);
       }
     }
-    
+
     // Проверка увольнения
     if (error.response?.status === 403 && error.response?.headers?.['x-fired']) {
       const fireMessage = error.response?.data?.detail || 'ВЫ УВОЛЕНЫ';
       window.dispatchEvent(new CustomEvent('user-fired', { detail: fireMessage }));
     }
-    
-    // Global error toast (skip 401 which is handled above)
-    if (error.response && error.response.status !== 401) {
-      const msg = error.response?.data?.detail || error.message || 'Ошибка';
+
+    // Global error toast (skip 401 and optional background widgets which render
+    // their own empty/error state). This prevents a stale backend during a
+    // rolling deploy from showing a misleading page-level "Not Found" toast.
+    if (error.response && error.response.status !== 401 && !req._silentGlobalError) {
+      const raw = error.response?.data?.detail;
+      let msg: string;
+      if (typeof raw === 'string') {
+        msg = raw;
+      } else if (Array.isArray(raw)) {
+        msg = raw
+          .map((item: { msg?: string; loc?: unknown[] }) =>
+            typeof item?.msg === 'string' ? item.msg : JSON.stringify(item)
+          )
+          .join('; ');
+      } else if (raw != null && typeof raw === 'object') {
+        msg = JSON.stringify(raw);
+      } else {
+        msg = error.message || 'Ошибка';
+      }
       window.dispatchEvent(new CustomEvent('api-error', { detail: msg }));
     }
-    
+
     return Promise.reject(error);
   }
 );

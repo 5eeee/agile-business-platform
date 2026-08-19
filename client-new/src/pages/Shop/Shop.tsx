@@ -1,6 +1,37 @@
 import { useEffect, useMemo, useState } from 'react';
-import * as Icons from 'lucide-react';
-import { ShoppingBag, BadgeCheck, Shield, Crown, RefreshCcw, Plus, Save, X, CircleOff, Coins as CoinsIcon, Pencil } from 'lucide-react';
+import {
+  Award,
+  BadgeCheck,
+  BookOpen,
+  Briefcase,
+  CheckCircle2,
+  CircleOff,
+  ClipboardCheck,
+  Code2,
+  Coins as CoinsIcon,
+  Crown,
+  Eye,
+  FileText,
+  GraduationCap,
+  Headphones,
+  Image,
+  Medal,
+  MessageCircle,
+  Pencil,
+  Percent,
+  Plus,
+  RefreshCcw,
+  Save,
+  Shield,
+  ShoppingBag,
+  Sparkles,
+  Sunrise,
+  TrendingUp,
+  User,
+  Users,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 import { useAppSelector, useAppDispatch } from '../../store/hooks';
 import {
   gamificationApi,
@@ -48,9 +79,36 @@ const defaultForm: FormState = {
   is_active: true,
 };
 
+const shopIcons: Record<string, LucideIcon> = {
+  Award,
+  BadgeCheck,
+  BookOpen,
+  Briefcase,
+  CheckCircle2,
+  ClipboardCheck,
+  Code2,
+  Coins: CoinsIcon,
+  Crown,
+  Eye,
+  FileText,
+  GraduationCap,
+  Headphones,
+  Image,
+  Medal,
+  MessageCircle,
+  Percent,
+  Shield,
+  ShoppingBag,
+  Sparkles,
+  Sunrise,
+  TrendingUp,
+  User,
+  Users,
+};
+
 function resolveIcon(name?: string | null) {
   if (!name) return <ShoppingBag size={26} />;
-  const IconCmp = (Icons as Record<string, any>)[name];
+  const IconCmp = shopIcons[name];
   if (IconCmp) return <IconCmp size={26} />;
   return <ShoppingBag size={26} />;
 }
@@ -79,7 +137,7 @@ export default function ShopPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(defaultForm);
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = !!(user && ['admin', 'owner', 'deputy_owner'].includes(user.role));
 
   const categoryLabel = useMemo<Record<string, string>>(() => ({
     status: lang.shop?.categoryStatus || 'Статус',

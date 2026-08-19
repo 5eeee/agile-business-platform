@@ -1,7 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { RTL_LANGUAGES } from '../../i18n';
-
-export type Language = 'ru' | 'ka' | 'en' | 'ar';
+export type Language = 'ru' | 'ka' | 'en';
 
 interface UIState {
   theme: 'light' | 'dark';
@@ -12,7 +10,8 @@ interface UIState {
   mobileMenuOpen: boolean;
 }
 
-const savedLang = (localStorage.getItem('language') as Language) || 'ru';
+const storedLanguage = localStorage.getItem('language');
+const savedLang: Language = storedLanguage === 'ka' || storedLanguage === 'en' ? storedLanguage : 'ru';
 
 const initialState: UIState = {
   theme: (localStorage.getItem('theme') as 'light' | 'dark') || 'light',
@@ -24,7 +23,7 @@ const initialState: UIState = {
 
 // Инициализация темы и направления при загрузке
 document.documentElement.setAttribute('data-theme', initialState.theme);
-document.documentElement.dir = RTL_LANGUAGES.includes(savedLang) ? 'rtl' : 'ltr';
+document.documentElement.dir = 'ltr';
 
 const uiSlice = createSlice({
   name: 'ui',
@@ -38,7 +37,7 @@ const uiSlice = createSlice({
     setLanguage(state, action: PayloadAction<Language>) {
       state.language = action.payload;
       localStorage.setItem('language', action.payload);
-      document.documentElement.dir = RTL_LANGUAGES.includes(action.payload) ? 'rtl' : 'ltr';
+      document.documentElement.dir = 'ltr';
     },
     toggleSidebar(state) {
       state.sidebarOpen = !state.sidebarOpen;

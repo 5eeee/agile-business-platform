@@ -1,7 +1,7 @@
 # Pydantic-схемы событий
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -12,6 +12,7 @@ class EventCreate(BaseModel):
     event_date: Optional[datetime] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
+    event_kind: Literal["internal", "external"] = "internal"
 
 
 class EventUpdate(BaseModel):
@@ -19,6 +20,7 @@ class EventUpdate(BaseModel):
     description: Optional[str] = None
     location: Optional[str] = None
     event_date: Optional[datetime] = None
+    event_kind: Optional[Literal["internal", "external"]] = None
 
 
 class EventParticipantOut(BaseModel):
@@ -32,6 +34,7 @@ class EventOut(BaseModel):
     title: str
     description: Optional[str] = None
     location: Optional[str] = None
+    event_kind: str = "internal"
     photo_url: Optional[str] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None

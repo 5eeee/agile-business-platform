@@ -1,23 +1,24 @@
 # API задач и бэклога
+import math
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from sqlalchemy import select
+from sqlalchemy import select, or_, exists, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models.board_column import BoardColumn
-from app.models.task import Task, TaskComment, TaskHistory, TaskAttachment
+from app.models.task import Task, TaskAssignee, TaskComment, TaskHistory, TaskAttachment
 from app.models.backlog import BacklogItem
 from app.models.iteration import Iteration
 from app.models.project import ProjectMember
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, ADMIN_ROLES
 from app.schemas.task import (
     TaskCreate, TaskUpdate, TaskOut, TaskDetailOut, TaskCommentCreate,
     TaskCommentOut, TaskHistoryOut,
-    BacklogItemCreate, BacklogItemOut, BacklogToTask,
+    BacklogItemCreate, BacklogItemOut, BacklogToTask, TaskKPIReview,
 )
 from app.schemas.board_column import BoardColumnCreate, BoardColumnOut
 from app.middleware.auth import get_current_user
@@ -25,6 +26,40 @@ from app.dependencies import get_project_member, get_project_member_by_iteration
 from app.config import TASK_STATUSES, TASK_PRIORITIES
 
 router = APIRouter(prefix="/tasks", tags=["Задачи"])
+
+
+RETURN_REASON_CONFIG = {
+    "requirements": ("Не соответствует ТЗ", "medium", Decimal("2.0"), False),
+    "logic": ("Логические ошибки", "critical", Decimal("3.0"), False),
+    "broken_code": ("Код не работает", "critical", Decimal("3.0"), False),
+    "report_error": ("Ошибка в отчёте", "medium", Decimal("2.0"), False),
+    "incomplete": ("Неполнота данных", "small", Decimal("1.0"), False),
+    "external": ("Внешняя причина (не вина сотрудника)", "regular", Decimal("0.0"), True),
+}
+
+
+def _ordered_assignee_ids_from_task(t: Task) -> list[uuid.UUID]:
+    rows = list(getattr(t, "assignees", None) or [])
+    if rows:
+        return [a.user_id for a in sorted(rows, key=lambda x: (x.created_at, x.id))]
+    if t.assignee_id:
+        return [t.assignee_id]
+    return []
+
+
+async def _sync_task_assignees(session: AsyncSession, task_id: uuid.UUID, user_ids: list[uuid.UUID]) -> None:
+    want = list(dict.fromkeys(user_ids))
+    want_set = set(want)
+    r = await session.execute(select(TaskAssignee).where(TaskAssignee.task_id == task_id))
+    existing_rows = list(r.scalars().all())
+    existing_by_uid: dict[uuid.UUID, TaskAssignee] = {row.user_id: row for row in existing_rows}
+    for uid, row in list(existing_by_uid.items()):
+        if uid not in want_set:
+            await session.delete(row)
+            existing_by_uid.pop(uid, None)
+    for uid in want:
+        if uid not in existing_by_uid:
+            session.add(TaskAssignee(task_id=task_id, user_id=uid))
 
 
 @router.get("/iteration/{iteration_id}/board-columns", response_model=list[BoardColumnOut])
@@ -55,10 +90,19 @@ async def create_iteration_board_column(
     db.add(col)
     await db.commit()
     await db.refresh(col)
+    from app.websocket import manager as ws_mgr
+    await ws_mgr.broadcast_to_iteration(
+        str(iteration_id),
+        {"type": "resource_changed", "resource": "board_columns", "iteration_id": str(iteration_id)},
+    )
     return BoardColumnOut.model_validate(col)
 
 
 def _serialize_task(t: Task, user_names: dict[uuid.UUID, str]) -> TaskOut:
+    ids = _ordered_assignee_ids_from_task(t)
+    names = [user_names.get(i) or "" for i in ids]
+    primary_id = ids[0] if ids else None
+    primary_name = (names[0] or None) if names else None
     return TaskOut(
         id=t.id,
         iteration_id=t.iteration_id,
@@ -66,8 +110,10 @@ def _serialize_task(t: Task, user_names: dict[uuid.UUID, str]) -> TaskOut:
         description=t.description,
         status=t.status,
         priority=t.priority,
-        assignee_id=t.assignee_id,
-        assignee_name=user_names.get(t.assignee_id) if t.assignee_id else None,
+        assignee_id=primary_id,
+        assignee_name=primary_name,
+        assignee_ids=ids,
+        assignee_names=names,
         creator_id=t.creator_id,
         creator_name=user_names.get(t.creator_id),
         start_date=t.start_date,
@@ -75,6 +121,15 @@ def _serialize_task(t: Task, user_names: dict[uuid.UUID, str]) -> TaskOut:
         parent_id=t.parent_id,
         board_column_id=t.board_column_id,
         is_completed=bool(getattr(t, "is_completed", False)),
+        first_submitted_at=t.first_submitted_at,
+        last_submitted_at=t.last_submitted_at,
+        kpi_status=t.kpi_status,
+        has_excuse=bool(t.has_excuse),
+        excuse_reason=t.excuse_reason,
+        is_discrepancy=bool(t.is_discrepancy),
+        systematic_defect=bool(t.systematic_defect),
+        return_count=int(t.return_count or 0),
+        is_bonus_eligible=bool(t.is_bonus_eligible),
         created_at=t.created_at,
         updated_at=t.updated_at,
     )
@@ -91,13 +146,17 @@ async def list_tasks(
     _member: ProjectMember = Depends(get_project_member_by_iteration),
 ):
     """Список задач итерации с фильтрацией"""
-    query = select(Task).where(Task.iteration_id == iteration_id)
+    query = select(Task).options(selectinload(Task.assignees)).where(Task.iteration_id == iteration_id)
     if status:
         query = query.where(Task.status == status)
     if priority:
         query = query.where(Task.priority == priority)
     if assignee_id:
-        query = query.where(Task.assignee_id == assignee_id)
+        in_junction = exists().where(
+            TaskAssignee.task_id == Task.id,
+            TaskAssignee.user_id == assignee_id,
+        )
+        query = query.where(or_(Task.assignee_id == assignee_id, in_junction))
     query = query.order_by(Task.created_at.desc())
     
     result = await db.execute(query)
@@ -106,6 +165,8 @@ async def list_tasks(
     # Batch-fetch user names to avoid N+1 queries
     user_ids: set[uuid.UUID] = set()
     for t in tasks:
+        for a in getattr(t, "assignees", None) or []:
+            user_ids.add(a.user_id)
         if t.assignee_id:
             user_ids.add(t.assignee_id)
         user_ids.add(t.creator_id)
@@ -123,7 +184,12 @@ async def get_task(task_id: uuid.UUID, db: AsyncSession = Depends(get_db), user:
     """Получение задачи с комментариями и историей"""
     result = await db.execute(
         select(Task)
-        .options(selectinload(Task.comments), selectinload(Task.history), selectinload(Task.attachments))
+        .options(
+            selectinload(Task.comments),
+            selectinload(Task.history),
+            selectinload(Task.attachments),
+            selectinload(Task.assignees),
+        )
         .where(Task.id == task_id)
     )
     task = result.scalar_one_or_none()
@@ -131,7 +197,7 @@ async def get_task(task_id: uuid.UUID, db: AsyncSession = Depends(get_db), user:
         raise HTTPException(status_code=404, detail="Задача не найдена")
     
     # Verify project membership via iteration
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         iter_result = await db.execute(select(Iteration).where(Iteration.id == task.iteration_id))
         iteration = iter_result.scalar_one_or_none()
         if iteration:
@@ -143,6 +209,8 @@ async def get_task(task_id: uuid.UUID, db: AsyncSession = Depends(get_db), user:
     
     # Batch-fetch all user names needed
     user_ids = {task.creator_id}
+    for a in getattr(task, "assignees", None) or []:
+        user_ids.add(a.user_id)
     if task.assignee_id:
         user_ids.add(task.assignee_id)
     for cm in task.comments:
@@ -191,7 +259,7 @@ async def create_task(data: TaskCreate, db: AsyncSession = Depends(get_db), user
     iteration = iter_result.scalar_one_or_none()
     if not iteration:
         raise HTTPException(status_code=404, detail="Итерация не найдена")
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         member_result = await db.execute(
             select(ProjectMember).where(ProjectMember.project_id == iteration.project_id, ProjectMember.user_id == user.id)
         )
@@ -231,11 +299,17 @@ async def create_task(data: TaskCreate, db: AsyncSession = Depends(get_db), user
                 await db.flush()
             board_column_id = first_col.id
 
+    initial_assignee_ids: list[uuid.UUID] = []
+    if data.assignee_ids:
+        initial_assignee_ids = list(dict.fromkeys(data.assignee_ids))
+    elif data.assignee_id:
+        initial_assignee_ids = [data.assignee_id]
+
     task = Task(
         iteration_id=data.iteration_id,
         title=data.title,
         description=data.description,
-        assignee_id=data.assignee_id,
+        assignee_id=initial_assignee_ids[0] if initial_assignee_ids else None,
         creator_id=user.id,
         start_date=data.start_date,
         deadline=data.deadline,
@@ -245,54 +319,380 @@ async def create_task(data: TaskCreate, db: AsyncSession = Depends(get_db), user
         is_completed=False,
     )
     db.add(task)
+    await db.flush()
+    for uid in initial_assignee_ids:
+        db.add(TaskAssignee(task_id=task.id, user_id=uid))
     await db.commit()
-    await db.refresh(task)
-    
-    # Notify assignee
-    if task.assignee_id and task.assignee_id != user.id:
-        from app.models.notification import Notification
-        from app.services.telegram import notify_task_assigned
-        from app.websocket import manager
-        notif = Notification(
-            user_id=task.assignee_id,
-            title="Новая задача",
-            message=f"{user.name} назначил вам задачу: {task.title}",
-            type="task",
+
+    result = await db.execute(select(Task).options(selectinload(Task.assignees)).where(Task.id == task.id))
+    task = result.scalar_one()
+
+    from app.models.notification import Notification
+    from app.services.telegram import notify_task_assigned
+    from app.websocket import manager as ws_mgr
+
+    for assign_uid in initial_assignee_ids:
+        if assign_uid != user.id:
+            notif = Notification(
+                user_id=assign_uid,
+                title="Новая задача",
+                message=f"{user.name} назначил вам задачу: {task.title}",
+                type="task",
+            )
+            db.add(notif)
+            await db.commit()
+            await ws_mgr.send_to_user(str(assign_uid), {
+                "type": "notification",
+                "title": notif.title,
+                "message": notif.message,
+            })
+            assignee_row = await db.execute(select(User).where(User.id == assign_uid))
+            assignee = assignee_row.scalar_one_or_none()
+            if assignee and assignee.telegram_id and assignee.notify_tasks:
+                iter_result = await db.execute(select(Iteration).where(Iteration.id == task.iteration_id))
+                it = iter_result.scalar_one_or_none()
+                await notify_task_assigned(assignee.telegram_id, task.title, it.name if it else "")
+
+    uid_set = {user.id, *initial_assignee_ids}
+    users_result = await db.execute(select(User.id, User.name).where(User.id.in_(uid_set)))
+    unames = {row.id: row.name for row in users_result.all()}
+    created_out = _serialize_task(task, unames)
+    await ws_mgr.broadcast_to_iteration(
+        str(task.iteration_id),
+        {"type": "task_created", "task": created_out.model_dump(mode="json")},
+    )
+    return created_out
+
+
+async def _can_review_task_kpi(db: AsyncSession, task: Task, user: User) -> bool:
+    if user.role in ADMIN_ROLES or task.creator_id == user.id:
+        return True
+    iteration = await db.get(Iteration, task.iteration_id)
+    if not iteration:
+        return False
+    member = await db.execute(
+        select(ProjectMember).where(
+            ProjectMember.project_id == iteration.project_id,
+            ProjectMember.user_id == user.id,
+            ProjectMember.is_admin == True,
         )
-        db.add(notif)
-        await db.commit()
-        # Push via WebSocket
-        await manager.send_to_user(str(task.assignee_id), {
-            "type": "notification",
-            "title": notif.title,
-            "message": notif.message,
-        })
-        # Telegram
-        assignee_result = await db.execute(select(User).where(User.id == task.assignee_id))
-        assignee = assignee_result.scalar_one_or_none()
-        if assignee and assignee.telegram_id and assignee.notify_tasks:
-            iter_result = await db.execute(select(Iteration).where(Iteration.id == task.iteration_id))
-            it = iter_result.scalar_one_or_none()
-            await notify_task_assigned(assignee.telegram_id, task.title, it.name if it else "")
-    
-    unames = {user.id: user.name}
-    if task.assignee_id:
-        ar = await db.execute(select(User.name).where(User.id == task.assignee_id))
-        row = ar.one_or_none()
-        if row:
-            unames[task.assignee_id] = row[0]
-    return _serialize_task(task, unames)
+    )
+    return member.scalar_one_or_none() is not None
+
+
+async def _create_task_notification(
+    db: AsyncSession,
+    recipient_id: uuid.UUID | None,
+    title: str,
+    message: str,
+    notification_type: str = "task",
+    link: str | None = None,
+) -> None:
+    if not recipient_id:
+        return
+    from app.models.notification import Notification
+    from app.websocket import manager as ws_manager
+
+    db.add(Notification(user_id=recipient_id, title=title, message=message, type=notification_type, link=link))
+    await ws_manager.send_to_user(
+        str(recipient_id),
+        {"type": "notification", "title": title, "message": message, "notification_type": notification_type, "link": link},
+    )
+
+
+async def _apply_manager_kpi7_overdue_penalty(db: AsyncSession, task: Task, previous_status: str | None) -> None:
+    """Однократно начислить руководителю −2 за новую просрочку подчинённого."""
+    if previous_status == "overdue" or task.kpi_status != "overdue" or task.has_excuse or task.is_discrepancy:
+        return
+    assignee = await db.get(User, task.assignee_id)
+    if not assignee or not assignee.manager_id:
+        return
+    from app.models.gamification import KPI7ManagerPoints
+    month = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    result = await db.execute(
+        select(KPI7ManagerPoints).where(
+            KPI7ManagerPoints.manager_id == assignee.manager_id,
+            KPI7ManagerPoints.month == month,
+        )
+    )
+    counter = result.scalar_one_or_none()
+    if counter:
+        counter.total_points = Decimal(str(counter.total_points or 0)) - Decimal("2")
+        counter.updated_at = datetime.utcnow()
+    else:
+        db.add(KPI7ManagerPoints(manager_id=assignee.manager_id, month=month, total_points=Decimal("-2")))
+
+
+@router.post("/{task_id}/submit-for-review", response_model=TaskOut)
+async def submit_task_for_review(
+    task_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Record every submission attempt and send the task to KPI review."""
+    result = await db.execute(
+        select(Task).options(selectinload(Task.assignees)).where(Task.id == task_id)
+    )
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+
+    assignee_ids = set(_ordered_assignee_ids_from_task(task))
+    if user.id not in assignee_ids and user.role not in ADMIN_ROLES:
+        raise HTTPException(status_code=403, detail="Отправить задачу может только исполнитель")
+
+    now = datetime.utcnow()
+    previous_status = task.kpi_status
+    if task.first_submitted_at is None:
+        task.first_submitted_at = now
+    task.last_submitted_at = now
+    task.kpi_status = "pending_review"
+    task.is_completed = False
+    task.updated_at = now
+    db.add(
+        TaskHistory(
+            task_id=task.id,
+            user_id=user.id,
+            field="kpi_submission",
+            old_value=previous_status,
+            new_value=now.isoformat(),
+        )
+    )
+
+    from app.models.gamification import TaskReturn
+    pending_return = await db.execute(
+        select(TaskReturn)
+        .where(TaskReturn.task_id == task.id, TaskReturn.resend_time.is_(None))
+        .order_by(TaskReturn.return_time.desc())
+        .limit(1)
+    )
+    returned = pending_return.scalar_one_or_none()
+    if returned:
+        from app.services.kpi_calculator import calculate_working_hours
+        returned.resend_time = now
+        returned.effective_hours = calculate_working_hours(returned.return_time, now)
+        norm_hours = {
+            "critical": Decimal("4"),
+            "medium": Decimal("6"),
+            "small": Decimal("8"),
+        }.get(returned.error_category, Decimal("8"))
+        subordinates = await db.scalar(select(func.count(User.id)).where(User.manager_id == task.assignee_id)) or 0
+        if assignee := await db.get(User, task.assignee_id):
+            if assignee.role in ADMIN_ROLES or subordinates > 0:
+                norm_hours = max(Decimal("1"), norm_hours - Decimal("1"))
+        if not returned.is_external and returned.effective_hours > norm_hours:
+            overtime_blocks = math.ceil(float((returned.effective_hours - norm_hours) / norm_hours))
+            returned.extra_penalty = Decimal(str(overtime_blocks))
+            returned.total_weight = returned.base_weight + returned.extra_penalty
+
+        if not returned.is_external and returned.effective_hours <= norm_hours:
+            from app.models.gamification import KPI9Bonus
+            base_bonus = max(Decimal("0"), (norm_hours - returned.effective_hours) / norm_hours * Decimal("5"))
+            quick_bonus = base_bonus if returned.is_iterative else base_bonus / Decimal(str(max(1, returned.return_count)))
+            if quick_bonus > 0:
+                db.add(KPI9Bonus(
+                    employee_id=task.assignee_id,
+                    month=now.replace(day=1, hour=0, minute=0, second=0, microsecond=0),
+                    event_type="quick_rework",
+                    percent=quick_bonus.quantize(Decimal("0.01")),
+                    source_id=returned.id,
+                ))
+
+    await _create_task_notification(
+        db,
+        task.creator_id,
+        "Задача отправлена на проверку",
+        f"{user.name} отправил задачу «{task.title}» на KPI-проверку.",
+    )
+    await db.commit()
+
+    from app.api.gamification import kpi_cache
+    kpi_cache.clear()
+    names = {user.id: user.name}
+    return _serialize_task(task, names)
+
+
+@router.post("/{task_id}/kpi-review", response_model=TaskOut)
+async def review_task_kpi(
+    task_id: uuid.UUID,
+    data: TaskKPIReview,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Accept, mark overdue, or return a submitted task according to KPI rules."""
+    result = await db.execute(
+        select(Task).options(selectinload(Task.assignees)).where(Task.id == task_id)
+    )
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+    if not await _can_review_task_kpi(db, task, user):
+        raise HTTPException(status_code=403, detail="Недостаточно прав для KPI-проверки")
+    if task.last_submitted_at is None:
+        raise HTTPException(status_code=400, detail="Сначала исполнитель должен отправить задачу на проверку")
+    if not task.assignee_id:
+        raise HTTPException(status_code=400, detail="У задачи не указан исполнитель")
+
+    now = datetime.utcnow()
+    assignee = await db.get(User, task.assignee_id)
+    previous_status = task.kpi_status
+
+    if data.decision == "rework":
+        if not data.return_reason or data.return_reason not in RETURN_REASON_CONFIG:
+            raise HTTPException(status_code=422, detail="Выберите причину возврата")
+        if not data.comment or not data.comment.strip():
+            raise HTTPException(status_code=422, detail="Комментарий руководителя обязателен")
+
+        from app.models.gamification import TaskReturn
+        _label, category, base_weight, is_external = RETURN_REASON_CONFIG[data.return_reason]
+        same_reason_count = await db.scalar(
+            select(func.count(TaskReturn.id)).where(
+                TaskReturn.task_id == task.id,
+                TaskReturn.reason_code == data.return_reason,
+                TaskReturn.is_external == False,
+            )
+        ) or 0
+        counted_return_number = int(task.return_count or 0) + (0 if is_external else 1)
+        extra_penalty = Decimal("0.0")
+        db.add(
+            TaskReturn(
+                task_id=task.id,
+                employee_id=task.assignee_id,
+                error_category=category,
+                reason_code=data.return_reason,
+                base_weight=base_weight,
+                extra_penalty=extra_penalty,
+                total_weight=base_weight + extra_penalty,
+                return_count=max(1, counted_return_number),
+                is_iterative=same_reason_count >= 1 and not is_external,
+                is_external=is_external,
+                comment=data.comment.strip(),
+                created_by=user.id,
+            )
+        )
+        task.kpi_status = "rework"
+        task.is_completed = False
+        task.has_excuse = False
+        task.excuse_reason = None
+        task.is_discrepancy = False
+        task.is_bonus_eligible = False
+        if not is_external:
+            task.return_count = counted_return_number
+            task.systematic_defect = same_reason_count >= 1
+        await _create_task_notification(
+            db,
+            task.assignee_id,
+            "Задача возвращена на доработку",
+            f"«{task.title}»: {_label}. {data.comment.strip()}",
+        )
+    else:
+        objective_status = "in_time" if task.deadline and task.last_submitted_at <= task.deadline else "overdue"
+        task.is_discrepancy = data.decision != objective_status
+        task.kpi_status = data.decision
+        task.is_completed = True
+        task.has_excuse = False
+        task.excuse_reason = None
+
+        if data.decision == "overdue" and data.has_excuse:
+            if not data.excuse_reason or not data.excuse_reason.strip():
+                raise HTTPException(status_code=422, detail="Укажите уважительную причину")
+            task.has_excuse = True
+            task.excuse_reason = data.excuse_reason.strip()
+            from app.services.kpi_calculator import validate_and_apply_excuse
+            if not await validate_and_apply_excuse(db, task.assignee_id, task):
+                task.has_excuse = False
+                task.excuse_reason = None
+
+        await _apply_manager_kpi7_overdue_penalty(db, task, previous_status)
+
+        task.is_bonus_eligible = bool(
+            data.decision == "in_time"
+            and not task.is_discrepancy
+            and task.first_submitted_at
+            and task.deadline
+            and task.first_submitted_at <= task.deadline
+            and int(task.return_count or 0) == 0
+        )
+
+        if task.is_bonus_eligible:
+            from app.models.gamification import KPI9Bonus
+            duplicate_bonus = await db.scalar(
+                select(func.count(KPI9Bonus.id)).where(
+                    KPI9Bonus.employee_id == task.assignee_id,
+                    KPI9Bonus.event_type == "quality_first_submission",
+                    KPI9Bonus.source_id == task.id,
+                )
+            ) or 0
+            if duplicate_bonus == 0:
+                db.add(
+                    KPI9Bonus(
+                        employee_id=task.assignee_id,
+                        month=now.replace(day=1, hour=0, minute=0, second=0, microsecond=0),
+                        event_type="quality_first_submission",
+                        percent=Decimal("2.0"),
+                        source_id=task.id,
+                    )
+                )
+
+        if task.is_discrepancy:
+            await _create_task_notification(
+                db,
+                user.id,
+                "Расхождение KPI по задаче",
+                f"Ваша отметка по задаче «{task.title}» не совпадает с датой отправки и дедлайном. Исправьте решение.",
+                "critical_divergence",
+            )
+            owners = await db.execute(select(User).where(User.role.in_([UserRole.OWNER, UserRole.DEPUTY_OWNER])))
+            for owner in owners.scalars().all():
+                await _create_task_notification(
+                    db,
+                    owner.id,
+                    "Расхождение KPI по задаче",
+                    f"Отметка руководителя по задаче «{task.title}» не совпадает с датой отправки и дедлайном.",
+                    "critical_divergence",
+                )
+        await _create_task_notification(
+            db,
+            task.assignee_id,
+            "Результат KPI-проверки задачи",
+            f"«{task.title}»: {('сдано в срок' if data.decision == 'in_time' else 'просрочено')}.",
+        )
+
+    task.updated_at = now
+    db.add(
+        TaskHistory(
+            task_id=task.id,
+            user_id=user.id,
+            field="kpi_status",
+            old_value=previous_status,
+            new_value=task.kpi_status,
+        )
+    )
+    await db.commit()
+
+    from app.api.gamification import kpi_cache
+    from app.websocket import manager as ws_manager
+    kpi_cache.clear()
+    names = {task.assignee_id: assignee.name if assignee else "", task.creator_id: user.name}
+    serialized = _serialize_task(task, names)
+    await ws_manager.broadcast_to_iteration(
+        str(task.iteration_id),
+        {"type": "task_update", "task_id": str(task.id), "task": serialized.model_dump(mode="json")},
+    )
+    return serialized
 
 
 @router.put("/{task_id}", response_model=TaskOut)
 async def update_task(task_id: uuid.UUID, data: TaskUpdate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    result = await db.execute(select(Task).where(Task.id == task_id))
+    result = await db.execute(
+        select(Task).options(selectinload(Task.assignees)).where(Task.id == task_id)
+    )
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Задача не найдена")
     
     # Verify project membership via iteration
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         iter_result = await db.execute(select(Iteration).where(Iteration.id == task.iteration_id))
         iteration = iter_result.scalar_one_or_none()
         if iteration:
@@ -317,10 +717,17 @@ async def update_task(task_id: uuid.UUID, data: TaskUpdate, db: AsyncSession = D
         if not col or col.iteration_id != task.iteration_id:
             raise HTTPException(status_code=400, detail="Некорректная колонка доски")
 
-    old_assignee_id = task.assignee_id
+    old_assignee_ids = _ordered_assignee_ids_from_task(task)
     was_completed = bool(task.is_completed)
-    update_data = data.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
+
+    full_patch = data.model_dump(exclude_unset=True)
+    assignee_ids_explicit = full_patch.pop("assignee_ids", None)
+    if assignee_ids_explicit is not None:
+        full_patch.pop("assignee_id", None)
+    assignee_id_touched = "assignee_id" in full_patch
+    assignee_id_value = full_patch.pop("assignee_id") if assignee_id_touched else None
+
+    for key, value in full_patch.items():
         old_value = str(getattr(task, key)) if getattr(task, key) is not None else None
         new_value = str(value) if value is not None else None
         
@@ -332,9 +739,42 @@ async def update_task(task_id: uuid.UUID, data: TaskUpdate, db: AsyncSession = D
             db.add(history)
         
         setattr(task, key, value)
+
+    new_assignee_ids_to_sync: list[uuid.UUID] | None = None
+    if assignee_ids_explicit is not None:
+        new_assignee_ids_to_sync = list(dict.fromkeys(assignee_ids_explicit))
+        task.assignee_id = new_assignee_ids_to_sync[0] if new_assignee_ids_to_sync else None
+    elif assignee_id_touched:
+        new_assignee_ids_to_sync = [u for u in [assignee_id_value] if u is not None]
+        task.assignee_id = assignee_id_value
+
+    if new_assignee_ids_to_sync is not None:
+        await _sync_task_assignees(db, task.id, new_assignee_ids_to_sync)
+        if sorted(old_assignee_ids) != sorted(new_assignee_ids_to_sync):
+            hist_uids = set(old_assignee_ids) | set(new_assignee_ids_to_sync)
+            if hist_uids:
+                hn = await db.execute(select(User.id, User.name).where(User.id.in_(hist_uids)))
+                name_map = {row.id: row.name for row in hn.all()}
+            else:
+                name_map = {}
+
+            def _lbl(ids: list[uuid.UUID]) -> str | None:
+                if not ids:
+                    return None
+                return ", ".join(name_map.get(i) or str(i) for i in ids)
+
+            db.add(
+                TaskHistory(
+                    task_id=task.id,
+                    user_id=user.id,
+                    field="assignee",
+                    old_value=_lbl(old_assignee_ids),
+                    new_value=_lbl(new_assignee_ids_to_sync),
+                )
+            )
     
     # Coin reward for task completion with anti-cheat protections.
-    if update_data.get("is_completed") is True and not was_completed and task.assignee_id:
+    if full_patch.get("is_completed") is True and not was_completed and task.assignee_id:
         from app.models.gamification import CoinTransaction, CoinTransactionType
         # Strict dedupe: one reward per task ever.
         dup = await db.execute(
@@ -383,55 +823,54 @@ async def update_task(task_id: uuid.UUID, data: TaskUpdate, db: AsyncSession = D
 
     task.updated_at = datetime.utcnow()
     await db.commit()
-    await db.refresh(task)
-    
-    # Broadcast task update to all WebSocket clients in this iteration
+
+    result_reload = await db.execute(
+        select(Task).options(selectinload(Task.assignees)).where(Task.id == task.id)
+    )
+    task = result_reload.scalar_one()
+
     from app.websocket import manager as ws_manager
-    await ws_manager.broadcast_to_iteration(str(task.iteration_id), {
-        "type": "task_update",
-        "task_id": str(task.id),
-        "status": task.status,
-        "priority": task.priority,
-        "title": task.title,
-        "is_completed": task.is_completed,
-    })
-    
-    # Notify new assignee if reassigned
-    if task.assignee_id and task.assignee_id != old_assignee_id and task.assignee_id != user.id:
+
+    uid_batch = {task.creator_id, *_ordered_assignee_ids_from_task(task), user.id}
+    users_res = await db.execute(select(User.id, User.name).where(User.id.in_(uid_batch)))
+    user_names = {row.id: row.name for row in users_res.all()}
+    user_names[user.id] = user.name
+    serialized = _serialize_task(task, user_names)
+    await ws_manager.broadcast_to_iteration(
+        str(task.iteration_id),
+        {
+            "type": "task_update",
+            "task_id": str(task.id),
+            "task": serialized.model_dump(mode="json"),
+        },
+    )
+
+    if new_assignee_ids_to_sync is not None:
         from app.models.notification import Notification
         from app.services.telegram import notify_task_assigned
-        from app.websocket import manager as ws_manager
-        notif = Notification(
-            user_id=task.assignee_id,
-            title="Назначена задача",
-            message=f"{user.name} назначил вам задачу: {task.title}",
-            type="task",
-        )
-        db.add(notif)
-        await db.commit()
-        await ws_manager.send_to_user(str(task.assignee_id), {
-            "type": "notification", "title": notif.title, "message": notif.message,
-        })
-        # Telegram
-        assignee_result = await db.execute(select(User).where(User.id == task.assignee_id))
-        assignee = assignee_result.scalar_one_or_none()
-        if assignee and assignee.telegram_id and assignee.notify_tasks:
-            iter_result = await db.execute(select(Iteration).where(Iteration.id == task.iteration_id))
-            it = iter_result.scalar_one_or_none()
-            await notify_task_assigned(assignee.telegram_id, task.title, it.name if it else "")
-    
-    user_names = {user.id: user.name}
-    if task.assignee_id:
-        ar = await db.execute(select(User.name).where(User.id == task.assignee_id))
-        row = ar.one_or_none()
-        if row:
-            user_names[task.assignee_id] = row[0]
-    if task.creator_id not in user_names:
-        cr = await db.execute(select(User.name).where(User.id == task.creator_id))
-        row = cr.one_or_none()
-        if row:
-            user_names[task.creator_id] = row[0]
-    return _serialize_task(task, user_names)
+        old_set = set(old_assignee_ids)
+        for uid in new_assignee_ids_to_sync:
+            if uid in old_set or uid == user.id:
+                continue
+            notif = Notification(
+                user_id=uid,
+                title="Назначена задача",
+                message=f"{user.name} назначил вам задачу: {task.title}",
+                type="task",
+            )
+            db.add(notif)
+            await db.commit()
+            await ws_manager.send_to_user(str(uid), {
+                "type": "notification", "title": notif.title, "message": notif.message,
+            })
+            assignee_result = await db.execute(select(User).where(User.id == uid))
+            assignee = assignee_result.scalar_one_or_none()
+            if assignee and assignee.telegram_id and assignee.notify_tasks:
+                iter_result = await db.execute(select(Iteration).where(Iteration.id == task.iteration_id))
+                it = iter_result.scalar_one_or_none()
+                await notify_task_assigned(assignee.telegram_id, task.title, it.name if it else "")
+
+    return serialized
 
 
 @router.delete("/{task_id}")
@@ -442,7 +881,7 @@ async def delete_task(task_id: uuid.UUID, db: AsyncSession = Depends(get_db), us
         raise HTTPException(status_code=404, detail="Задача не найдена")
     
     # Only task creator, project member or admin can delete
-    if user.role != UserRole.ADMIN and task.creator_id != user.id:
+    if user.role not in ADMIN_ROLES and task.creator_id != user.id:
         iter_result = await db.execute(select(Iteration).where(Iteration.id == task.iteration_id))
         iteration = iter_result.scalar_one_or_none()
         if iteration:
@@ -456,8 +895,15 @@ async def delete_task(task_id: uuid.UUID, db: AsyncSession = Depends(get_db), us
             if not member_result.scalar_one_or_none():
                 raise HTTPException(status_code=403, detail="Нет прав на удаление задачи")
     
+    iteration_id_str = str(task.iteration_id)
+    task_id_str = str(task.id)
     await db.delete(task)
     await db.commit()
+    from app.websocket import manager as ws_manager
+    await ws_manager.broadcast_to_iteration(
+        iteration_id_str,
+        {"type": "task_deleted", "task_id": task_id_str},
+    )
     return {"message": "Задача удалена"}
 
 
@@ -468,7 +914,7 @@ async def add_comment(task_id: uuid.UUID, data: TaskCommentCreate, db: AsyncSess
     task = task_result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Задача не найдена")
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         iter_result = await db.execute(select(Iteration).where(Iteration.id == task.iteration_id))
         iteration = iter_result.scalar_one_or_none()
         if iteration:
@@ -502,7 +948,7 @@ async def upload_task_attachment(
     task = task_result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Задача не найдена")
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         iter_result = await db.execute(select(Iteration).where(Iteration.id == task.iteration_id))
         iteration = iter_result.scalar_one_or_none()
         if iteration:
@@ -562,7 +1008,7 @@ async def list_backlog(
 @backlog_router.post("", response_model=BacklogItemOut, status_code=201)
 async def create_backlog_item(data: BacklogItemCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     # Verify project membership
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         member_result = await db.execute(
             select(ProjectMember).where(ProjectMember.project_id == data.project_id, ProjectMember.user_id == user.id)
         )
@@ -587,7 +1033,7 @@ async def delete_backlog_item(item_id: uuid.UUID, db: AsyncSession = Depends(get
     if not item:
         raise HTTPException(status_code=404, detail="Элемент бэклога не найден")
     # Verify: creator, project admin, or site admin
-    if user.role != UserRole.ADMIN and item.creator_id != user.id:
+    if user.role not in ADMIN_ROLES and item.creator_id != user.id:
         member_result = await db.execute(
             select(ProjectMember).where(
                 ProjectMember.project_id == item.project_id, ProjectMember.user_id == user.id, ProjectMember.is_admin == True
@@ -608,7 +1054,7 @@ async def backlog_to_task(item_id: uuid.UUID, data: BacklogToTask, db: AsyncSess
     if not item:
         raise HTTPException(status_code=404, detail="Элемент бэклога не найден")
     # Verify project membership
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         member_result = await db.execute(
             select(ProjectMember).where(ProjectMember.project_id == item.project_id, ProjectMember.user_id == user.id)
         )
@@ -636,6 +1082,7 @@ async def backlog_to_task(item_id: uuid.UUID, data: BacklogToTask, db: AsyncSess
         if not col or col.iteration_id != data.iteration_id:
             raise HTTPException(status_code=400, detail="Некорректная колонка доски")
 
+    initial_ids = [data.assignee_id] if data.assignee_id else []
     task = Task(
         iteration_id=data.iteration_id,
         title=item.title,
@@ -650,15 +1097,17 @@ async def backlog_to_task(item_id: uuid.UUID, data: BacklogToTask, db: AsyncSess
     )
     db.add(task)
     await db.delete(item)
+    await db.flush()
+    for uid in initial_ids:
+        db.add(TaskAssignee(task_id=task.id, user_id=uid))
     await db.commit()
-    await db.refresh(task)
-    
-    unames = {user.id: user.name}
-    if task.assignee_id:
-        ar = await db.execute(select(User.name).where(User.id == task.assignee_id))
-        row = ar.one_or_none()
-        if row:
-            unames[task.assignee_id] = row[0]
+
+    tr = await db.execute(select(Task).options(selectinload(Task.assignees)).where(Task.id == task.id))
+    task = tr.scalar_one()
+
+    uid_set = {user.id, *initial_ids}
+    users_result = await db.execute(select(User.id, User.name).where(User.id.in_(uid_set)))
+    unames = {row.id: row.name for row in users_result.all()}
     return _serialize_task(task, unames)
 
 

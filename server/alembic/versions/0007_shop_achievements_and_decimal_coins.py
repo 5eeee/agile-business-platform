@@ -16,25 +16,39 @@ depends_on = None
 
 
 def upgrade() -> None:
-    migrations = [
-        "ALTER TABLE coin_transactions ALTER COLUMN amount TYPE NUMERIC(12,2) USING amount::numeric",
-        "ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS rarity VARCHAR(20) NOT NULL DEFAULT 'common'",
-        "ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS level_required INTEGER NOT NULL DEFAULT 1",
-        "ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS is_featured BOOLEAN NOT NULL DEFAULT false",
-        """
-        CREATE TABLE IF NOT EXISTS user_shop_equips (
-            id UUID PRIMARY KEY,
-            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            purchase_id UUID NOT NULL REFERENCES shop_purchases(id) ON DELETE CASCADE,
-            category VARCHAR(50) NOT NULL,
-            equipped_at TIMESTAMP WITHOUT TIME ZONE DEFAULT (NOW() AT TIME ZONE 'utc')
-        )
-        """,
-        "CREATE UNIQUE INDEX IF NOT EXISTS uq_user_shop_category_equip ON user_shop_equips (user_id, category)",
-        "CREATE INDEX IF NOT EXISTS ix_user_shop_equips_user_id ON user_shop_equips (user_id)",
-    ]
-    for sql in migrations:
-        op.execute(sa.text(sql))
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        migrations = [
+            """
+            DO $$
+            BEGIN
+              IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'coin_transactions'
+                  AND column_name = 'amount' AND data_type = 'integer'
+              ) THEN
+                ALTER TABLE coin_transactions
+                  ALTER COLUMN amount TYPE NUMERIC(12,2) USING amount::numeric;
+              END IF;
+            END $$;
+            """,
+            "ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS rarity VARCHAR(20) NOT NULL DEFAULT 'common'",
+            "ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS level_required INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE shop_items ADD COLUMN IF NOT EXISTS is_featured BOOLEAN NOT NULL DEFAULT false",
+            """
+            CREATE TABLE IF NOT EXISTS user_shop_equips (
+                id UUID PRIMARY KEY,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                purchase_id UUID NOT NULL REFERENCES shop_purchases(id) ON DELETE CASCADE,
+                category VARCHAR(50) NOT NULL,
+                equipped_at TIMESTAMP WITHOUT TIME ZONE DEFAULT (NOW() AT TIME ZONE 'utc')
+            )
+            """,
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_user_shop_category_equip ON user_shop_equips (user_id, category)",
+            "CREATE INDEX IF NOT EXISTS ix_user_shop_equips_user_id ON user_shop_equips (user_id)",
+        ]
+        for sql in migrations:
+            op.execute(sa.text(sql))
 
 
 def downgrade() -> None:

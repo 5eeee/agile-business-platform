@@ -112,8 +112,8 @@
   position: absolute;
   top: 8px;
   right: 8px;
-  width: 24px;
-  height: 24px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   border: none;
   background: rgba(0,0,0,0.5);
@@ -123,6 +123,47 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+@media (max-width: 640px) {
+  .header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+
+  .actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .actions > button {
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .formRow,
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .photo,
+  .video {
+    height: 190px;
+  }
+
+  .placeInfo {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 390px) {
+  .actions {
+    grid-template-columns: 1fr;
+  }
 }
 
 .empty {

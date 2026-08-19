@@ -1,204 +1,339 @@
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Bell,
+  ChevronDown,
+  Languages,
+  LogOut,
+  Menu,
+  Moon,
+  Sun,
+  UserRound,
+} from 'lucide-react';
 import { useAppSelector, useAppDispatch } from '../../store/hooks';
 import { logout } from '../../store/slices/authSlice';
 import { toggleTheme, setLanguage, toggleMobileMenu } from '../../store/slices/uiSlice';
-import { fetchCoinBalance } from '../../store/slices/coinsSlice';
 import { t } from '../../i18n';
-import styles from './Header.module.css';
-import { useState, useEffect, useRef } from 'react';
 import api from '../../api/client';
-import SearchModal from '../SearchModal/SearchModal';
-import { Coins } from 'lucide-react';
+import type { Notification } from '../../types';
+import styles from './Header.module.css';
 
-const SunIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-);
-const MoonIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-);
-const BellIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-);
-const MenuIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
-);
-const LogoutIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{width:14,height:14,strokeWidth:2}}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
-);
-const SearchIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-);
+const headerLabels = {
+  ru: {
+    account: 'Меню профиля',
+    close: 'Закрыть меню',
+    darkTheme: 'Включить тёмную тему',
+    home: 'На главную',
+    language: 'Язык интерфейса',
+    lightTheme: 'Включить светлую тему',
+    menu: 'Открыть навигацию',
+    unread: 'Непрочитанных уведомлений',
+  },
+  ka: {
+    account: 'პროფილის მენიუ',
+    close: 'მენიუს დახურვა',
+    darkTheme: 'მუქი თემის ჩართვა',
+    home: 'მთავარ გვერდზე',
+    language: 'ინტერფეისის ენა',
+    lightTheme: 'ღია თემის ჩართვა',
+    menu: 'ნავიგაციის გახსნა',
+    unread: 'წაუკითხავი შეტყობინებები',
+  },
+  en: {
+    account: 'Profile menu',
+    close: 'Close menu',
+    darkTheme: 'Switch to dark theme',
+    home: 'Go to home',
+    language: 'Interface language',
+    lightTheme: 'Switch to light theme',
+    menu: 'Open navigation',
+    unread: 'Unread notifications',
+  },
+} as const;
+
+const languageNames = {
+  ru: 'Русский',
+  ka: 'ქართული',
+  en: 'English',
+} as const;
+
+const localeByLanguage = {
+  ru: 'ru-RU',
+  ka: 'ka-GE',
+  en: 'en-US',
+} as const;
+
+type HeaderPopover = 'notifications' | 'account' | null;
 
 export default function Header() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { user } = useAppSelector(s => s.auth);
-  const { theme, language } = useAppSelector(s => s.ui);
-  const { balance } = useAppSelector(s => s.coins);
+  const { theme, language, mobileMenuOpen } = useAppSelector(s => s.ui);
   const lang = t(language);
+  const labels = headerLabels[language];
   const themeBtnRef = useRef<HTMLButtonElement>(null);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [showSearch, setShowSearch] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [openPopover, setOpenPopover] = useState<HeaderPopover>(null);
 
-  // Keyboard shortcut Cmd+K / Ctrl+K
+  const changeLanguage = (code: 'ru' | 'ka' | 'en') => {
+    dispatch(setLanguage(code));
+    api.put('/users/profile', { language: code }).catch(() => {
+      window.dispatchEvent(new CustomEvent('api-error', { detail: 'Не удалось сохранить язык профиля' }));
+    });
+  };
+
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setShowSearch(prev => !prev);
-      }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenPopover(null);
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
   }, []);
 
-  // Subscribe to unread count from NotificationToast via custom event instead of polling
   useEffect(() => {
     if (!user) return;
-    const handler = (e: Event) => {
-      setUnreadCount((e as CustomEvent).detail as number);
+
+    const handler = (event: Event) => {
+      setUnreadCount(Number((event as CustomEvent).detail) || 0);
     };
+
     window.addEventListener('unread-count-update', handler);
+    api.get('/notifications/unread-count')
+      .then(({ data }) => setUnreadCount(Number(data.count) || 0))
+      .catch(() => setUnreadCount(0));
+
     return () => window.removeEventListener('unread-count-update', handler);
   }, [user]);
 
-  const loadNotifications = async () => {
+  const toggleNotifications = async () => {
+    if (openPopover === 'notifications') {
+      setOpenPopover(null);
+      return;
+    }
+
+    setOpenPopover('notifications');
     try {
       const { data } = await api.get('/notifications');
-      setNotifications(data);
-      setShowNotifications(true);
+      setNotifications(Array.isArray(data) ? data : []);
       await api.put('/notifications/read-all');
       setUnreadCount(0);
     } catch {
       setNotifications([]);
-      setShowNotifications(true);
     }
   };
 
+  const handleThemeToggle = () => {
+    const rect = themeBtnRef.current?.getBoundingClientRect();
+    if (rect) {
+      window.dispatchEvent(new CustomEvent('theme-toggle-click', {
+        detail: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+      }));
+    }
+    dispatch(toggleTheme());
+  };
+
   const handleLogout = () => {
-    api.post('/auth/logout').catch(() => {}).finally(() => {
+    setOpenPopover(null);
+    api.post('/auth/logout', null, { _silent401: true } as any).catch(() => undefined).finally(() => {
       dispatch(logout());
       navigate('/login');
     });
   };
 
-  useEffect(() => {
-    if (user) dispatch(fetchCoinBalance());
-  }, [dispatch, user]);
-
   if (!user) return null;
+
+  const notificationLabel = unreadCount > 0
+    ? `${lang.nav.notifications}. ${labels.unread}: ${unreadCount}`
+    : lang.nav.notifications;
 
   return (
     <header className={styles.header}>
       <div className={styles.left}>
-        <button className={`${styles.iconBtn} mobile-only`} onClick={() => dispatch(toggleMobileMenu())} aria-label="Menu">
-          <MenuIcon />
+        <button
+          type="button"
+          className={`${styles.iconBtn} mobile-only`}
+          onClick={() => dispatch(toggleMobileMenu())}
+          aria-label={mobileMenuOpen ? labels.close : labels.menu}
+          aria-controls="primary-navigation"
+          aria-expanded={mobileMenuOpen}
+        >
+          <Menu aria-hidden />
         </button>
-        <div className={styles.logo} onClick={() => navigate('/')}>
+        <button type="button" className={styles.logo} onClick={() => navigate('/')} aria-label={labels.home}>
           <img
             src={theme === 'dark' ? '/logo-light.svg' : '/logo-dark.svg'}
-            alt="Agile.Workspace"
+            alt=""
             className={styles.logoImg}
           />
-        </div>
+        </button>
       </div>
 
       <div id="header-project-slot" className={styles.projectSlot} />
 
       <div className={styles.right}>
-        <button className={styles.iconBtn} onClick={() => setShowSearch(true)} aria-label="Search (Ctrl+K)">
-          <SearchIcon />
-        </button>
-
-        <div className={styles.langSwitch}>
-          {(['ru', 'ka', 'en', 'ar'] as const).map((code) => (
-            <button
-              key={code}
-              className={`${styles.langBtn} ${language === code ? styles.langActive : ''}`}
-              onClick={() => dispatch(setLanguage(code))}
-            >
-              {code.toUpperCase()}
-            </button>
-          ))}
-        </div>
-
-        <button
-          ref={themeBtnRef}
-          className={styles.iconBtn}
-          aria-label={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
-          onClick={() => {
-            const rect = themeBtnRef.current?.getBoundingClientRect();
-            if (rect) {
-              const x = rect.left + rect.width / 2;
-              const y = rect.top + rect.height / 2;
-              window.dispatchEvent(new CustomEvent('theme-toggle-click', { detail: { x, y } }));
-            }
-            dispatch(toggleTheme());
-          }}
-        >
-          {theme === 'light' ? <MoonIcon /> : <SunIcon />}
-        </button>
-
         <div className={styles.notifWrap}>
-          <button className={styles.iconBtn} onClick={loadNotifications} aria-label="Notifications">
-            <BellIcon />
-            {unreadCount > 0 && <span className={styles.notifBadge} style={{ animation: 'badgePulse 2s ease-in-out infinite' }} />}
+          <button
+            type="button"
+            className={styles.iconBtn}
+            onClick={toggleNotifications}
+            aria-label={notificationLabel}
+            aria-controls="header-notifications"
+            aria-expanded={openPopover === 'notifications'}
+          >
+            <Bell aria-hidden />
+            {unreadCount > 0 ? (
+              <span className={styles.notifBadge} aria-hidden>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            ) : null}
           </button>
-          {showNotifications && (
-            <>
-              <div className={styles.notifOverlay} onClick={() => setShowNotifications(false)} />
-              <div className={styles.notifDropdown}>
-                <h4>{lang.nav.notifications}</h4>
-                {notifications.length === 0 ? (
-                  <p className={styles.notifEmpty}>{lang.common.noData}</p>
-                ) : (
-                  notifications.map((n) => {
-                    const borderColor = n.type === 'deadline_overdue' ? '#dc2626' : n.type === 'deadline_today' ? '#f59e0b' : n.type === 'deadline_soon' ? '#3b82f6' : undefined;
-                    return (
-                    <div key={n.id} className={styles.notifItem} onClick={() => { if (n.link && typeof n.link === 'string' && n.link.startsWith('/')) { navigate(n.link); setShowNotifications(false); } }} style={{ cursor: n.link ? 'pointer' : undefined, borderLeftColor: borderColor }}>
-                      <strong>{n.title}</strong>
-                      <p>{n.message}</p>
-                      <small>{new Date(n.created_at).toLocaleString()}</small>
-                    </div>
-                    );
-                  })
-                )}
+
+          {openPopover === 'notifications' ? (
+            <section
+              id="header-notifications"
+              className={styles.notifDropdown}
+              role="dialog"
+              aria-labelledby="header-notifications-title"
+            >
+              <div className={styles.dropdownHeading}>
+                <h2 id="header-notifications-title">{lang.nav.notifications}</h2>
               </div>
-            </>
-          )}
+              {notifications.length === 0 ? (
+                <p className={styles.notifEmpty}>{lang.common.noData}</p>
+              ) : (
+                <div className={styles.notifList}>
+                  {notifications.map(notification => {
+                    const isCritical = notification.type === 'deadline_overdue' || notification.type === 'critical_divergence';
+                    const isWarning = notification.type === 'deadline_today' || notification.type === 'critical_warning';
+                    const isInfo = notification.type === 'deadline_soon' || notification.type === 'critical_info';
+                    const borderColor = isCritical ? '#dc2626' : isWarning ? '#f59e0b' : isInfo ? '#3b82f6' : 'transparent';
+                    const canNavigate = typeof notification.link === 'string' && notification.link.startsWith('/');
+                    const itemStyle = { '--notification-accent': borderColor } as CSSProperties;
+                    const content = (
+                      <>
+                        <strong>{notification.title}</strong>
+                        <p>{notification.message}</p>
+                        <time dateTime={notification.created_at}>
+                          {new Date(notification.created_at).toLocaleString(localeByLanguage[language])}
+                        </time>
+                      </>
+                    );
+
+                    return canNavigate ? (
+                      <button
+                        key={notification.id}
+                        type="button"
+                        className={`${styles.notifItem} ${styles.notifItemInteractive}`}
+                        style={itemStyle}
+                        onClick={() => {
+                          navigate(notification.link as string);
+                          setOpenPopover(null);
+                        }}
+                      >
+                        {content}
+                      </button>
+                    ) : (
+                      <article key={notification.id} className={styles.notifItem} style={itemStyle}>
+                        {content}
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          ) : null}
         </div>
 
-        {user.role === 'admin' && (
-          <button className={`btn btn-sm btn-danger ${styles.adminBtn}`} onClick={() => navigate('/admin')}>
-            {lang.nav.admin}
+        <div className={styles.accountWrap}>
+          <button
+            type="button"
+            className={styles.accountBtn}
+            onClick={() => setOpenPopover(previous => previous === 'account' ? null : 'account')}
+            aria-label={`${labels.account}: ${user.name}`}
+            aria-controls="header-account-menu"
+            aria-expanded={openPopover === 'account'}
+          >
+            <span className={styles.avatar} aria-hidden>
+              {user.avatar_url ? <img src={user.avatar_url} alt="" /> : (user.name || '?')[0].toUpperCase()}
+            </span>
+            <span className={styles.userName}>{user.name}</span>
+            <ChevronDown className={styles.accountChevron} aria-hidden />
           </button>
-        )}
 
-        <button className={styles.coinBtn} onClick={() => navigate('/shop')} aria-label={lang.shop?.balanceLabel || 'Agile.Coins'}>
-          <Coins size={18} />
-          <span>{balance !== null ? balance : '...'}</span>
-        </button>
+          {openPopover === 'account' ? (
+            <div
+              id="header-account-menu"
+              className={styles.accountMenu}
+              role="dialog"
+              aria-label={labels.account}
+            >
+              <div className={styles.accountIdentity}>
+                <strong>{user.name}</strong>
+                <span>{user.email}</span>
+              </div>
 
-        <div className={styles.userInfo} onClick={() => navigate('/profile')}>
-          <div className="avatar avatar-sm">
-            {user.avatar_url ? (
-              <img src={user.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: 6, objectFit: 'cover' }} />
-            ) : (
-              (user.name || '?')[0].toUpperCase()
-            )}
-          </div>
-          <span className={`${styles.userName} desktop-only`}>{user.name}</span>
+              <button
+                type="button"
+                className={styles.menuRow}
+                onClick={() => {
+                  setOpenPopover(null);
+                  navigate('/profile');
+                }}
+              >
+                <UserRound aria-hidden />
+                <span>{lang.nav.profile}</span>
+              </button>
+
+              <label className={styles.languageSelectRow}>
+                <Languages aria-hidden />
+                <span>{labels.language}</span>
+                <select
+                  className={styles.languageSelect}
+                  value={language}
+                  onChange={event => changeLanguage(event.target.value as 'ru' | 'ka' | 'en')}
+                  aria-label={labels.language}
+                >
+                  {(['ru', 'ka', 'en'] as const).map(code => (
+                    <option key={code} value={code}>{languageNames[code]}</option>
+                  ))}
+                </select>
+              </label>
+
+              <button
+                ref={themeBtnRef}
+                type="button"
+                className={styles.menuRow}
+                onClick={handleThemeToggle}
+              >
+                {theme === 'light' ? <Moon aria-hidden /> : <Sun aria-hidden />}
+                <span>{theme === 'light' ? labels.darkTheme : labels.lightTheme}</span>
+              </button>
+
+              <button
+                type="button"
+                className={`${styles.menuRow} ${styles.logoutRow}`}
+                onClick={handleLogout}
+              >
+                <LogOut aria-hidden />
+                <span>{lang.nav.logout}</span>
+              </button>
+            </div>
+          ) : null}
         </div>
-
-        <button className={`btn btn-ghost btn-sm`} onClick={handleLogout} style={{ gap: 4 }} aria-label={lang.nav.logout}>
-          <LogoutIcon />
-          <span className="desktop-only">{lang.nav.logout}</span>
-        </button>
       </div>
 
-      {showSearch && <SearchModal onClose={() => setShowSearch(false)} />}
+      {openPopover ? (
+        <button
+          type="button"
+          className={styles.popoverOverlay}
+          onClick={() => setOpenPopover(null)}
+          aria-label={labels.close}
+          tabIndex={-1}
+        />
+      ) : null}
     </header>
   );
 }

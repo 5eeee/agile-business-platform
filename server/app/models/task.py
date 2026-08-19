@@ -1,7 +1,7 @@
 # Модель задачи
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Text, DateTime, ForeignKey, Index, Boolean
+from sqlalchemy import String, Text, DateTime, ForeignKey, Index, Boolean, UniqueConstraint, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
@@ -36,6 +36,17 @@ class Task(Base):
     )
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     
+    # KPI 1 & 5 tracking fields
+    first_submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    kpi_status: Mapped[str | None] = mapped_column(String(50), nullable=True)  # in_time, overdue, rework, excused
+    has_excuse: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    excuse_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_discrepancy: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    systematic_defect: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    return_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_bonus_eligible: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -43,6 +54,9 @@ class Task(Base):
     iteration = relationship("Iteration", back_populates="tasks")
     assignee = relationship("User", foreign_keys=[assignee_id])
     creator = relationship("User", foreign_keys=[creator_id])
+    assignees: Mapped[list["TaskAssignee"]] = relationship(
+        back_populates="task", cascade="all, delete-orphan", order_by="TaskAssignee.created_at",
+    )
     comments: Mapped[list["TaskComment"]] = relationship(back_populates="task", cascade="all, delete-orphan")
     history: Mapped[list["TaskHistory"]] = relationship(back_populates="task", cascade="all, delete-orphan")
     attachments: Mapped[list["TaskAttachment"]] = relationship(back_populates="task", cascade="all, delete-orphan")
@@ -54,6 +68,19 @@ class Task(Base):
         "Task", back_populates="parent", foreign_keys=[parent_id], cascade="all, delete-orphan"
     )
     board_column = relationship("BoardColumn", back_populates="tasks")
+
+
+class TaskAssignee(Base):
+    __tablename__ = "task_assignees"
+    __table_args__ = (UniqueConstraint("task_id", "user_id", name="uq_task_assignee"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    task_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    task: Mapped["Task"] = relationship(back_populates="assignees")
+    user = relationship("User")
 
 
 class TaskComment(Base):

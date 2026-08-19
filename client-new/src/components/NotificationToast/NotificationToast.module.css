@@ -20,9 +20,26 @@
   max-width: 360px;
   box-shadow: 0 4px 20px var(--color-shadow-lg);
   animation: slideIn 0.3s ease;
-  cursor: pointer;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 10px;
   transition: opacity 0.3s;
 }
+.icon {
+  color: var(--color-primary);
+  margin-top: 1px;
+}
+.content { min-width: 0; }
+.close {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  padding: 2px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.close:hover { color: var(--color-text); background: var(--color-bg); }
 .toast:hover {
   opacity: 0.9;
 }
@@ -47,7 +64,8 @@
   color: var(--color-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.4;
 }
 
 .time {
@@ -64,5 +82,30 @@
   to {
     transform: translateX(0);
     opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .container {
+    top: calc(var(--header-height) + 8px);
+    left: 10px;
+    right: 10px;
+    gap: 6px;
+  }
+
+  .toast {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    padding: 12px;
+  }
+
+  .close {
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: -7px -7px -7px 0;
   }
 }

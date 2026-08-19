@@ -10,6 +10,7 @@ class TaskCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
     assignee_id: Optional[uuid.UUID] = None
+    assignee_ids: Optional[list[uuid.UUID]] = None
     start_date: Optional[datetime] = None
     deadline: Optional[datetime] = None
     priority: str = "Средний"
@@ -23,10 +24,19 @@ class TaskUpdate(BaseModel):
     status: Optional[str] = None
     priority: Optional[str] = None
     assignee_id: Optional[uuid.UUID] = None
+    assignee_ids: Optional[list[uuid.UUID]] = None
     start_date: Optional[datetime] = None
     deadline: Optional[datetime] = None
     board_column_id: Optional[uuid.UUID] = None
     is_completed: Optional[bool] = None
+
+
+class TaskKPIReview(BaseModel):
+    decision: str = Field(..., pattern="^(in_time|overdue|rework)$")
+    comment: Optional[str] = Field(None, max_length=4000)
+    has_excuse: bool = False
+    excuse_reason: Optional[str] = Field(None, max_length=255)
+    return_reason: Optional[str] = Field(None, max_length=100)
 
 
 class TaskCommentCreate(BaseModel):
@@ -42,6 +52,8 @@ class TaskOut(BaseModel):
     priority: str
     assignee_id: Optional[uuid.UUID] = None
     assignee_name: Optional[str] = None
+    assignee_ids: list[uuid.UUID] = []
+    assignee_names: list[str] = []
     creator_id: uuid.UUID
     creator_name: Optional[str] = None
     start_date: Optional[datetime] = None
@@ -49,6 +61,15 @@ class TaskOut(BaseModel):
     parent_id: Optional[uuid.UUID] = None
     board_column_id: Optional[uuid.UUID] = None
     is_completed: bool = False
+    first_submitted_at: Optional[datetime] = None
+    last_submitted_at: Optional[datetime] = None
+    kpi_status: Optional[str] = None
+    has_excuse: bool = False
+    excuse_reason: Optional[str] = None
+    is_discrepancy: bool = False
+    systematic_defect: bool = False
+    return_count: int = 0
+    is_bonus_eligible: bool = False
     created_at: datetime
     updated_at: datetime
 

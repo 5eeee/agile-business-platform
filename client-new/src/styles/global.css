@@ -89,9 +89,18 @@
   box-sizing: border-box;
 }
 
+html {
+  min-width: 0;
+  min-height: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
+  min-width: 0;
+  overflow-x: hidden;
   background: var(--color-bg);
   color: var(--color-text);
   transition: background-color 0.3s, color 0.3s;
@@ -111,6 +120,22 @@ button {
   cursor: pointer;
   border: none;
   outline: none;
+  touch-action: manipulation;
+}
+
+button:disabled,
+input:disabled,
+textarea:disabled,
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-primary) 28%, transparent);
+  outline-offset: 2px;
 }
 
 input, textarea, select {
@@ -123,6 +148,23 @@ input, textarea, select {
   color: var(--color-text);
   width: 100%;
   transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+/* Не тянуть чекбоксы/радио на 100% ширины — иначе подпись остаётся с нулевой видимой областью */
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  min-width: 1rem;
+  max-width: none;
+  padding: 0;
+  margin: 0;
+  flex-shrink: 0;
+  vertical-align: middle;
+  accent-color: var(--color-primary);
+}
+input[type="checkbox"]:focus,
+input[type="radio"]:focus {
+  box-shadow: none;
 }
 input:focus, textarea:focus, select:focus {
   outline: none;
@@ -365,9 +407,64 @@ input::placeholder, textarea::placeholder {
 @media (max-width: 768px) {
   :root {
     --sidebar-width: 0px;
+    --header-height: 60px;
   }
+
+  input,
+  textarea,
+  select {
+    /* 16px prevents the browser from zooming the whole interface on focus. */
+    font-size: 16px;
+  }
+
+  .btn {
+    min-height: 44px;
+    padding-inline: 16px;
+  }
+
+  .btn-sm {
+    min-height: 40px;
+  }
+
+  .btn-icon {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .card {
+    padding: 16px;
+  }
+
+  .modal-overlay,
+  .confirm-overlay {
+    align-items: flex-end;
+    padding: 12px;
+  }
+
+  .modal,
+  .confirm-modal {
+    width: 100%;
+    max-width: none;
+    max-height: min(90vh, 90dvh);
+    padding: 20px;
+    border-radius: 18px;
+  }
+
   .desktop-only {
     display: none !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .confirm-actions {
+    flex-direction: column-reverse;
+  }
+
+  .confirm-actions .btn {
+    width: 100%;
   }
 }
 
@@ -390,22 +487,6 @@ input::placeholder, textarea::placeholder {
   pointer-events: none;
 }
 
-/* RTL Support (Arabic) */
-[dir="rtl"] {
-  direction: rtl;
-  text-align: right;
-}
-
-[dir="rtl"] input,
-[dir="rtl"] textarea,
-[dir="rtl"] select {
-  text-align: right;
-}
-
-[dir="rtl"] .btn {
-  flex-direction: row-reverse;
-}
-
 /* Skeleton shimmer */
 @keyframes shimmer {
   0% { background-position: -400px 0; }
@@ -426,6 +507,17 @@ input::placeholder, textarea::placeholder {
 
 .page-enter {
   animation: pageEnter 0.25s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Button press */
@@ -499,8 +591,3 @@ input::placeholder, textarea::placeholder {
   color: var(--color-text-muted);
 }
 
-/* RTL dropdown fix */
-[dir="rtl"] .notifDropdown {
-  right: auto;
-  left: -8px;
-}

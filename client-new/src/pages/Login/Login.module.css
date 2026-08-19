@@ -84,3 +84,20 @@
   font-size: 14px;
   color: var(--color-success);
 }
+
+@media (max-width: 480px) {
+  .page {
+    align-items: flex-start;
+    padding: max(24px, env(safe-area-inset-top)) 14px 24px;
+  }
+
+  .card {
+    margin-top: clamp(20px, 8vh, 64px);
+    padding: 30px 20px;
+    border-radius: 18px;
+  }
+
+  .logo {
+    margin-bottom: 26px;
+  }
+}

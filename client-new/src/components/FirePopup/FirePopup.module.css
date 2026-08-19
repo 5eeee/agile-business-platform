@@ -20,8 +20,15 @@
 }
 
 .sadFace {
-  font-size: 64px;
+  width: 72px;
+  height: 72px;
+  margin-inline: auto;
   margin-bottom: 20px;
+  border-radius: 22px;
+  display: grid;
+  place-items: center;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
 }
 
 .message {
@@ -53,4 +60,28 @@
 }
 .logoutBtn:hover {
   opacity: 0.9;
+}
+
+@media (max-width: 520px) {
+  .overlay {
+    align-items: flex-end;
+    padding: 12px;
+  }
+
+  .popup {
+    width: 100%;
+    max-width: none;
+    padding: 32px 20px max(24px, env(safe-area-inset-bottom));
+    border-radius: 22px;
+  }
+
+  .title {
+    font-size: 23px;
+    letter-spacing: 1px;
+  }
+
+  .logoutBtn {
+    width: 100%;
+    min-height: 44px;
+  }
 }

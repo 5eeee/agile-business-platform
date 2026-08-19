@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../../store/hooks';
 import { login, register, clearError, verify2FA, clear2FA } from '../../store/slices/authSlice';
 import { t } from '../../i18n';
-import api from '../../api/client';
+import api, { resetAuthRedirectGate } from '../../api/client';
 import styles from './Login.module.css';
 
 export default function LoginPage() {
@@ -18,6 +18,10 @@ export default function LoginPage() {
   const mode = new URLSearchParams(location.search).get('mode');
   const storedMode = typeof window !== 'undefined' ? sessionStorage.getItem('login_mode') : null;
   const effectiveMode = mode || storedMode;
+
+  useEffect(() => {
+    resetAuthRedirectGate();
+  }, []);
 
   useEffect(() => {
     // Храним только на короткое время: если query пропал (redirect), всё равно покажем нужную форму один раз.
@@ -127,7 +131,7 @@ export default function LoginPage() {
       <div className={styles.card}>
         <div className={styles.logo}>
           <span className={styles.logoIcon}>A</span>
-          <h1>Agile.Workspace</h1>
+          <h1>Agile Control Center</h1>
         </div>
 
         {needs2FA ? (
@@ -212,7 +216,7 @@ export default function LoginPage() {
             )}
 
             <input
-              type="email"
+              type="text"
               placeholder={lang.auth.email}
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}

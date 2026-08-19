@@ -11,7 +11,7 @@ from app.models.board_column import BoardColumn
 from app.models.task import Task
 from app.models.project import ProjectMember
 from app.models.retrospective import Retrospective
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, ADMIN_ROLES
 from app.schemas.iteration import IterationCreate, IterationUpdate, IterationOut
 from app.schemas.board_column import BoardColumnCreate, BoardColumnOut
 from app.middleware.auth import get_current_user
@@ -63,6 +63,11 @@ async def create_board_column(
     db.add(col)
     await db.commit()
     await db.refresh(col)
+    from app.websocket import manager as ws_mgr
+    await ws_mgr.broadcast_to_iteration(
+        str(iteration_id),
+        {"type": "resource_changed", "resource": "board_columns", "iteration_id": str(iteration_id)},
+    )
     return BoardColumnOut.model_validate(col)
 
 
@@ -87,6 +92,11 @@ async def delete_board_column(
         raise HTTPException(status_code=400, detail="В колонке есть задачи — удалите или перенесите их")
     await db.delete(col)
     await db.commit()
+    from app.websocket import manager as ws_mgr
+    await ws_mgr.broadcast_to_iteration(
+        str(iteration_id),
+        {"type": "resource_changed", "resource": "board_columns", "iteration_id": str(iteration_id)},
+    )
     return {"message": "Колонка удалена"}
 
 
@@ -97,7 +107,7 @@ async def get_iteration(iteration_id: uuid.UUID, db: AsyncSession = Depends(get_
     if not iteration:
         raise HTTPException(status_code=404, detail="Итерация не найдена")
     # Verify project membership
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         member_result = await db.execute(
             select(ProjectMember).where(ProjectMember.project_id == iteration.project_id, ProjectMember.user_id == user.id)
         )
@@ -110,7 +120,7 @@ async def get_iteration(iteration_id: uuid.UUID, db: AsyncSession = Depends(get_
 async def create_iteration(data: IterationCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     """Создание итерации (с возможностью выбора шаблона)"""
     # Verify project membership
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         member_result = await db.execute(
             select(ProjectMember).where(ProjectMember.project_id == data.project_id, ProjectMember.user_id == user.id)
         )
@@ -153,6 +163,14 @@ async def create_iteration(data: IterationCreate, db: AsyncSession = Depends(get
     
     await db.commit()
     await db.refresh(iteration)
+    from app.services.realtime import notify_project_watchers
+    await notify_project_watchers(db, data.project_id)
+    if data.template_name:
+        from app.websocket import manager as ws_mgr
+        await ws_mgr.broadcast_to_iteration(
+            str(iteration.id),
+            {"type": "resource_changed", "resource": "tasks", "iteration_id": str(iteration.id)},
+        )
     return IterationOut.model_validate(iteration)
 
 
@@ -163,7 +181,7 @@ async def update_iteration(iteration_id: uuid.UUID, data: IterationUpdate, db: A
     if not iteration:
         raise HTTPException(status_code=404, detail="Итерация не найдена")
     # Verify project membership
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         member_result = await db.execute(
             select(ProjectMember).where(ProjectMember.project_id == iteration.project_id, ProjectMember.user_id == user.id)
         )
@@ -175,6 +193,8 @@ async def update_iteration(iteration_id: uuid.UUID, data: IterationUpdate, db: A
     
     await db.commit()
     await db.refresh(iteration)
+    from app.services.realtime import notify_project_watchers
+    await notify_project_watchers(db, iteration.project_id)
     return IterationOut.model_validate(iteration)
 
 
@@ -186,7 +206,7 @@ async def complete_iteration(iteration_id: uuid.UUID, db: AsyncSession = Depends
     if not iteration:
         raise HTTPException(status_code=404, detail="Итерация не найдена")
     # Verify project membership
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         member_result = await db.execute(
             select(ProjectMember).where(ProjectMember.project_id == iteration.project_id, ProjectMember.user_id == user.id)
         )
@@ -204,12 +224,16 @@ async def complete_iteration(iteration_id: uuid.UUID, db: AsyncSession = Depends
     )
     if existing_retro.scalar_one_or_none():
         await db.commit()
+        from app.services.realtime import notify_project_watchers
+        await notify_project_watchers(db, iteration.project_id)
         return {"message": "Итерация завершена (ретроспектива уже существует)"}
-    
+
     retro = Retrospective(iteration_id=iteration.id)
     db.add(retro)
-    
+
     await db.commit()
+    from app.services.realtime import notify_project_watchers
+    await notify_project_watchers(db, iteration.project_id)
     return {"message": "Итерация завершена", "retrospective_id": str(retro.id)}
 
 
@@ -221,7 +245,7 @@ async def archive_iteration(iteration_id: uuid.UUID, db: AsyncSession = Depends(
     if not iteration:
         raise HTTPException(status_code=404, detail="Итерация не найдена")
     # Verify project membership
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         member_result = await db.execute(
             select(ProjectMember).where(ProjectMember.project_id == iteration.project_id, ProjectMember.user_id == user.id)
         )
@@ -233,6 +257,13 @@ async def archive_iteration(iteration_id: uuid.UUID, db: AsyncSession = Depends(
     
     iteration.status = IterationStatus.ARCHIVED
     await db.commit()
+    from app.services.realtime import notify_project_watchers
+    from app.websocket import manager as ws_mgr
+    await notify_project_watchers(db, iteration.project_id)
+    await ws_mgr.broadcast_to_iteration(
+        str(iteration_id),
+        {"type": "resource_changed", "resource": "iterations", "iteration_id": str(iteration_id)},
+    )
     return {"message": "Итерация в архиве"}
 
 
@@ -242,14 +273,23 @@ async def delete_iteration(iteration_id: uuid.UUID, db: AsyncSession = Depends(g
     iteration = result.scalar_one_or_none()
     if not iteration:
         raise HTTPException(status_code=404, detail="Итерация не найдена")
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         member_result = await db.execute(
             select(ProjectMember).where(ProjectMember.project_id == iteration.project_id, ProjectMember.user_id == user.id)
         )
         if not member_result.scalar_one_or_none():
             raise HTTPException(status_code=403, detail="Вы не являетесь участником этого проекта")
+    project_id = iteration.project_id
+    iter_id_str = str(iteration_id)
+    from app.websocket import manager as ws_mgr
+    await ws_mgr.broadcast_to_iteration(
+        iter_id_str,
+        {"type": "iteration_deleted", "iteration_id": iter_id_str},
+    )
     await db.delete(iteration)
     await db.commit()
+    from app.services.realtime import notify_project_watchers
+    await notify_project_watchers(db, project_id)
     return {"message": "Итерация удалена"}
 
 
@@ -270,6 +310,8 @@ async def reorder_iterations(
             if iteration:
                 iteration.sort_order = sort_order
     await db.commit()
+    from app.services.realtime import notify_project_watchers
+    await notify_project_watchers(db, project_id)
     return {"message": "ok"}
 
 

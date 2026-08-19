@@ -25,6 +25,17 @@ export default function ProjectsPage() {
   }, []);
 
   useEffect(() => {
+    const onRt = (e: Event) => {
+      const d = (e as CustomEvent<unknown>).detail as { type?: string; resource?: string } | null;
+      if (!d || d.type !== 'resource_changed' || d.resource !== 'project') return;
+      loadProjects();
+      window.dispatchEvent(new Event(PROJECTS_LIST_CHANGED));
+    };
+    window.addEventListener('agile-realtime', onRt);
+    return () => window.removeEventListener('agile-realtime', onRt);
+  }, []);
+
+  useEffect(() => {
     const st = location.state as { openCreate?: boolean } | null;
     if (st?.openCreate) {
       setShowCreate(true);

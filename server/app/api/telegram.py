@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.database import get_db
-from app.models.user import User
+from app.models.user import User, ADMIN_ROLES
 from app.middleware.auth import get_current_user
 from app.services.redis import get_redis
 from app.services.telegram import send_telegram_message
@@ -29,6 +29,13 @@ async def generate_telegram_link(
     user: User = Depends(get_current_user),
 ):
     """Генерирует код привязки Telegram. Пользователь отправляет /start CODE боту."""
+    if not settings.TELEGRAM_BOT_TOKEN:
+        return {
+            "configured": False,
+            "code": None,
+            "detail": "Telegram-бот ещё не подключён администратором",
+        }
+
     code = secrets.token_urlsafe(16)
     r = await get_redis()
     await r.setex(f"{LINK_CODE_PREFIX}{code}", LINK_CODE_TTL, str(user.id))
@@ -54,7 +61,7 @@ async def generate_telegram_link(
             except Exception:
                 pass
 
-    result = {"code": code}
+    result = {"configured": True, "code": code}
     if bot_username:
         result["bot_url"] = f"https://t.me/{bot_username}?start={code}"
         result["bot_username"] = bot_username
@@ -231,8 +238,7 @@ async def set_webhook(
     db: AsyncSession = Depends(get_db),
 ):
     """Установить webhook URL для Telegram бота. Только для администратора."""
-    from app.models.user import UserRole
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         raise HTTPException(status_code=403, detail="Только администратор")
 
     if not settings.TELEGRAM_BOT_TOKEN:

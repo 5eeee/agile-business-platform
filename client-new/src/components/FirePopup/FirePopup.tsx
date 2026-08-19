@@ -20,7 +20,7 @@ export default function FirePopup({ message }: Props) {
   if (!isFired && !message) return null;
 
   const handleLogout = () => {
-    api.post('/auth/logout').catch(() => {}).finally(() => {
+    api.post('/auth/logout', null, { _silent401: true } as any).catch(() => {}).finally(() => {
       dispatch(logout());
       window.location.href = '/login';
     });

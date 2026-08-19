@@ -15,17 +15,19 @@ from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
 from app.database import init_db, get_db, async_session
-from app.models.user import User, UserRole, UserStatus
+from app.models.user import User, UserRole, UserStatus, ADMIN_ROLES
 from app.models.project import ProjectMember
 from app.models.iteration import Iteration
 from app.models.chat import ChatMessage
 from app.models.notification import Notification
 from app.api.auth import hash_password
 from app.api import auth, users, admin, projects, iterations, tasks, chat, events, retrospectives, notifications
-from app.api import places, music, documents, analytics, export
+from app.api import places, music, documents, analytics, export, files, kpi_workflows
 from app.api import training as training_api
 from app.api import telegram as telegram_api
 from app.api import gamification as gamification_api
+from app.api import customer_satisfaction
+from app.api import applications as applications_api
 from app.websocket import manager
 from app.middleware.auth import decode_token
 from app.middleware.csrf import CSRFMiddleware
@@ -90,24 +92,77 @@ async def lifespan(app: FastAPI):
         await ensure_index()
     except Exception as e:
         logger.warning("Elasticsearch unavailable, chat search will not work: %s", e)
-    # Создание администратора (только если ADMIN_SEED_EMAIL задан)
-    if settings.ADMIN_SEED_EMAIL and settings.ADMIN_SEED_PASSWORD:
-        seed_email = settings.ADMIN_SEED_EMAIL.strip().lower()
-        async with async_session() as db:
-            result = await db.execute(select(User).where(func.lower(User.email) == seed_email))
-            if not result.scalar_one_or_none():
-                admin_user = User(
-                    name="Администратор",
-                    email=seed_email,
-                    password_hash=hash_password(settings.ADMIN_SEED_PASSWORD),
-                    role=UserRole.ADMIN,
-                    status=UserStatus.ACTIVE,
-                    email_confirmed=True,
-                )
-                db.add(admin_user)
-                await db.commit()
-                logger.info("Admin account seeded: %s", settings.ADMIN_SEED_EMAIL)
+    # Единый владелец платформы: супер-администратор Девятов Алексей.
+    # Учётные данные берутся только из окружения и не хранятся в исходном коде.
+    target_email = settings.ADMIN_SEED_EMAIL.strip().lower() or "admin@agile.com"
+    target_password = settings.ADMIN_SEED_PASSWORD
+    async with async_session() as db:
+        result = await db.execute(select(User).where(func.lower(User.email) == target_email))
+        user_ab = result.scalar_one_or_none()
+
+        if not user_ab and target_email != "admin@agile.com":
+            # Сохраняем прежние данные владельца при переходе со старого имени входа.
+            old_result = await db.execute(select(User).where(func.lower(User.email) == "admin@agile.com"))
+            user_ab = old_result.scalar_one_or_none()
+            if user_ab:
+                user_ab.email = target_email
+
+        if user_ab:
+            # Отображаемое имя и полномочия владельца не должны зависеть от того,
+            # задан ли seed-пароль в окружении production.
+            user_ab.name = "Алексей"
+            user_ab.last_name = "Девятов"
+            user_ab.role = UserRole.OWNER
+            user_ab.status = UserStatus.ACTIVE
+            user_ab.fire_message = None
+            if target_password:
+                user_ab.password_hash = hash_password(target_password)
+            logger.info("Owner account normalized and unblocked")
+        elif target_password:
+            user_ab = User(
+                name="Алексей",
+                last_name="Девятов",
+                email=target_email,
+                password_hash=hash_password(target_password),
+                role=UserRole.OWNER,
+                status=UserStatus.ACTIVE,
+                email_confirmed=True,
+            )
+            db.add(user_ab)
+            logger.info("New configured owner account created")
+        else:
+            logger.warning("Owner account is absent and ADMIN_SEED_PASSWORD is empty; creation skipped")
+
+        await db.commit()
+    # Запуск периодического планировщика KPI (cron задач)
+    import asyncio
+    
+    async def kpi_cron_scheduler():
+        logger.info("KPI Cron Scheduler started")
+        # Даем бэкенду время на полный запуск
+        await asyncio.sleep(10)
+        while True:
+            try:
+                async with async_session() as db:
+                    from app.api.gamification import run_kpi_cron_jobs
+                    await run_kpi_cron_jobs(db)
+                logger.info("KPI Cron Jobs executed successfully")
+            except Exception as e:
+                logger.error("Error in KPI Cron Scheduler: %s", e)
+            # Запуск раз в час
+            await asyncio.sleep(3600)
+            
+    kpi_task = asyncio.create_task(kpi_cron_scheduler())
+
     yield
+
+    # Мягкое завершение фоновой задачи KPI
+    kpi_task.cancel()
+    try:
+        await kpi_task
+    except asyncio.CancelledError:
+        pass
+        
     # Shutdown: close Elasticsearch client
     from app.services.search import close_es
     await close_es()
@@ -181,11 +236,17 @@ app.include_router(notifications.router, prefix="/api")
 app.include_router(places.router, prefix="/api")
 app.include_router(music.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
+app.include_router(files.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
 app.include_router(export.router, prefix="/api")
 app.include_router(training_api.router, prefix="/api")
 app.include_router(telegram_api.router, prefix="/api")
 app.include_router(gamification_api.router, prefix="/api")
+app.include_router(kpi_workflows.router, prefix="/api")
+app.include_router(customer_satisfaction.router, prefix="/api")
+app.include_router(customer_satisfaction.public_router, prefix="/api")
+app.include_router(applications_api.router, prefix="/api")
+app.include_router(applications_api.webhook_router, prefix="/api")
 
 
 # WebSocket для чата
@@ -230,7 +291,7 @@ async def ws_chat(websocket: WebSocket, iteration_id: str):
         if not ws_user:
             await websocket.close(code=4001)
             return
-        if ws_user.role != UserRole.ADMIN:
+        if ws_user.role not in ADMIN_ROLES:
             member_result = await db.execute(
                 select(ProjectMember).where(ProjectMember.project_id == iteration.project_id, ProjectMember.user_id == ws_user.id)
             )
@@ -327,14 +388,14 @@ async def ws_chat(websocket: WebSocket, iteration_id: str):
             await manager.broadcast_to_iteration(iteration_id, broadcast_data)
     except WebSocketDisconnect:
         manager.disconnect(websocket, iteration_id, user_id)
-        # Обновляем онлайн-статус
-        async with async_session() as db:
-            result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
-            user = result.scalar_one_or_none()
-            if user:
-                user.is_online = False
-                user.last_seen = datetime.utcnow()
-                await db.commit()
+        if not manager.user_has_connections(user_id):
+            async with async_session() as db:
+                result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+                user = result.scalar_one_or_none()
+                if user:
+                    user.is_online = False
+                    user.last_seen = datetime.utcnow()
+                    await db.commit()
 
 
 # WebSocket для онлайн-статуса
@@ -368,8 +429,8 @@ async def ws_status(websocket: WebSocket):
         return
     
     await websocket.accept()
-    manager.user_connections[user_id] = websocket
-    
+    manager.add_user_socket(user_id, websocket)
+
     # Обновляем онлайн-статус
     async with async_session() as db:
         result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
@@ -403,14 +464,15 @@ async def ws_status(websocket: WebSocket):
             except (json.JSONDecodeError, KeyError):
                 pass
     except WebSocketDisconnect:
-        manager.user_connections.pop(user_id, None)
-        async with async_session() as db:
-            result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
-            user = result.scalar_one_or_none()
-            if user:
-                user.is_online = False
-                user.last_seen = datetime.utcnow()
-                await db.commit()
+        manager.remove_user_socket(user_id, websocket)
+        if not manager.user_has_connections(user_id):
+            async with async_session() as db:
+                result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+                user = result.scalar_one_or_none()
+                if user:
+                    user.is_online = False
+                    user.last_seen = datetime.utcnow()
+                    await db.commit()
 
 
 @app.get("/api/health")
@@ -448,3 +510,33 @@ async def readiness():
         status_code=status_code,
         content={"status": "ready", "checks": checks},
     )
+
+
+# --- Глобальное состояние конференции ---
+from fastapi import HTTPException
+from app.middleware.auth import get_current_user
+
+CONFERENCE_ACTIVE = False
+
+@app.get("/api/conference")
+async def get_conference():
+    global CONFERENCE_ACTIVE
+    return {"active": CONFERENCE_ACTIVE}
+
+@app.post("/api/conference")
+async def create_conference(user: User = Depends(get_current_user)):
+    global CONFERENCE_ACTIVE
+    user_role = user.role.value if hasattr(user.role, 'value') else user.role
+    if user_role not in ("owner", "admin", "deputy_owner"):
+        raise HTTPException(status_code=403, detail="Нет прав для создания конференции")
+    CONFERENCE_ACTIVE = True
+    return {"active": True}
+
+@app.delete("/api/conference")
+async def stop_conference(user: User = Depends(get_current_user)):
+    global CONFERENCE_ACTIVE
+    user_role = user.role.value if hasattr(user.role, 'value') else user.role
+    if user_role not in ("owner", "admin", "deputy_owner"):
+        raise HTTPException(status_code=403, detail="Нет прав для завершения конференции")
+    CONFERENCE_ACTIVE = False
+    return {"active": False}

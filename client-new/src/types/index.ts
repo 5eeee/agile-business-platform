@@ -12,7 +12,7 @@ export interface User {
   about?: string;
   listening_to?: string;
   avatar_url?: string;
-  role: 'admin' | 'user' | 'intern';
+  role: 'admin' | 'user' | 'intern' | 'owner' | 'deputy_owner' | 'consultant';
   training_role?: 'intern' | 'training_editor' | null;
   status: 'pending' | 'active' | 'rejected' | 'fired' | 'blocked';
   is_online: boolean;
@@ -31,6 +31,71 @@ export interface User {
   notify_events?: boolean;
   show_iterations?: boolean;
   totp_enabled?: boolean;
+  department_id?: string | null;
+  manager_id?: string | null;
+}
+
+export type UserRole = User['role'];
+
+export const FULL_ACCESS_ROLES: UserRole[] = ['admin', 'owner', 'deputy_owner'];
+
+export interface ApplicationMember {
+  id: string;
+  user_id: string;
+  user_name?: string;
+  created_at: string;
+}
+
+export interface ApplicationHistory {
+  id: string;
+  user_id?: string;
+  user_name?: string;
+  old_status?: string;
+  new_status: string;
+  comment?: string;
+  created_at: string;
+}
+
+export interface ApplicationTask {
+  id: string;
+  application_id: string;
+  parent_id?: string | null;
+  assignee_id?: string;
+  assignee_name?: string;
+  assignee_ids?: string[];
+  assignee_names?: string[];
+  title: string;
+  description?: string;
+  department?: string;
+  deadline?: string | null;
+  is_completed: boolean;
+  created_at: string;
+}
+
+export interface Application {
+  id: string;
+  source: string;
+  status: string;
+  client_name: string;
+  client_email?: string;
+  client_phone?: string;
+  client_company?: string;
+  description?: string;
+  tz_content?: string;
+  departments?: string;
+  consultant_id?: string;
+  consultant_name?: string;
+  approved_by_id?: string;
+  approved_by_name?: string;
+  review_comment?: string;
+  project_name?: string | null;
+  project_id?: string | null;
+  sphere_deadlines_json?: string | null;
+  created_at: string;
+  updated_at: string;
+  members: ApplicationMember[];
+  history: ApplicationHistory[];
+  tasks: ApplicationTask[];
 }
 
 export interface SphereRole {
@@ -87,6 +152,8 @@ export interface Task {
   priority: string;
   assignee_id?: string;
   assignee_name?: string;
+  assignee_ids?: string[];
+  assignee_names?: string[];
   creator_id: string;
   creator_name?: string;
   start_date?: string;
@@ -94,6 +161,15 @@ export interface Task {
   parent_id?: string | null;
   board_column_id?: string | null;
   is_completed?: boolean;
+  first_submitted_at?: string | null;
+  last_submitted_at?: string | null;
+  kpi_status?: 'pending_review' | 'in_time' | 'overdue' | 'rework' | null;
+  has_excuse?: boolean;
+  excuse_reason?: string | null;
+  is_discrepancy?: boolean;
+  systematic_defect?: boolean;
+  return_count?: number;
+  is_bonus_eligible?: boolean;
   created_at: string;
   updated_at: string;
   comments?: TaskComment[];
@@ -186,6 +262,8 @@ export interface Event {
   title: string;
   description?: string;
   location?: string;
+  /** internal — внутреннее; external — внешнее */
+  event_kind?: 'internal' | 'external';
   photo_url?: string;
   start_date: string;
   end_date?: string;
@@ -239,19 +317,13 @@ export interface Document {
   created_at: string;
 }
 
-// Сферы деятельности
+// Сферы деятельности (синхронно с server/app/config.py SPHERES)
 export const SPHERES = [
   'Управление и Стратегия',
+  'Инвестиции и Оценка',
+  'Креатив',
   'Аналитика и Данные',
-  'Финансовый консалтинг и учет',
-  'Инвестиции и оценка',
-  'ИТ и разработка',
-  'Маркетинг',
-  'Продажи и развитие клиентов',
-  'Креатив дизайн',
-  'Операции и Логистика',
-  'Кадры и организации (HR)',
-  'Юридическое Сопровождение',
+  'ИТ и Разработка',
 ] as const;
 
 export const TASK_STATUSES = [

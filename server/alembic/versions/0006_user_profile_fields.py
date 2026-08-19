@@ -11,14 +11,16 @@ depends_on = None
 
 
 def upgrade() -> None:
-    migrations = [
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(255)",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS patronymic VARCHAR(255)",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS no_patronymic BOOLEAN NOT NULL DEFAULT false",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS section_access JSON",
-    ]
-    for sql in migrations:
-        op.execute(sa.text(sql))
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        migrations = [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(255)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS patronymic VARCHAR(255)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS no_patronymic BOOLEAN NOT NULL DEFAULT false",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS section_access JSON",
+        ]
+        for sql in migrations:
+            op.execute(sa.text(sql))
 
 
 def downgrade() -> None:

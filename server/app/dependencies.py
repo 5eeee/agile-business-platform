@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.project import Project, ProjectMember, ProjectRole
 from app.models.iteration import Iteration
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, ADMIN_ROLES
 from app.middleware.auth import get_current_user
 
 
@@ -18,7 +18,7 @@ async def get_project_member(
 ) -> ProjectMember:
     """Проверка что пользователь является участником проекта.
     Администраторы сайта имеют доступ ко всем проектам."""
-    if user.role == UserRole.ADMIN:
+    if user.role in ADMIN_ROLES:
         # Проверяем что проект существует
         result = await db.execute(select(Project).where(Project.id == project_id, Project.is_deleted == False))
         project = result.scalar_one_or_none()
@@ -67,7 +67,7 @@ async def get_project_member_by_iteration(
     if not iteration:
         raise HTTPException(status_code=404, detail="Итерация не найдена")
 
-    if user.role == UserRole.ADMIN:
+    if user.role in ADMIN_ROLES:
         return ProjectMember(
             project_id=iteration.project_id, user_id=user.id,
             is_admin=True, role=ProjectRole.OWNER,

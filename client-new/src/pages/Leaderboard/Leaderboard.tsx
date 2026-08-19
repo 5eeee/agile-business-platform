@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Crown, Coins, Clock3, GraduationCap, RefreshCcw, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { AlertTriangle, BarChart3, CheckCircle2, Clock3, Coins, Crown, RefreshCcw, UserRound } from 'lucide-react';
 import { gamificationApi, type LeaderboardEntry } from '../../api/gamification';
 import { useAppSelector } from '../../store/hooks';
 import { t } from '../../i18n';
@@ -36,20 +36,27 @@ export default function LeaderboardPage() {
   return (
     <div className={styles.page}>
       <div className={styles.head}>
-        <div>
-          <h1>{lang.nav.leaderboard || 'Лидерборд'}</h1>
-          <p className={styles.muted}>Топ стажёров по Agile.Coins, задачам и обучению.</p>
+        <div className={styles.headContent}>
+          <span className={styles.headIcon}><BarChart3 size={22} aria-hidden /></span>
+          <div>
+            <span className={styles.eyebrow}>Результаты команды</span>
+            <h1>{lang.nav.leaderboard || 'Лидерборд'}</h1>
+            <p className={styles.muted}>Единый рейтинг по выполненным задачам, дисциплине и Agile.Coins.</p>
+          </div>
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={load}><RefreshCcw size={14} /> Обновить</button>
+        <button className={styles.refreshButton} onClick={load} disabled={loading}><RefreshCcw size={16} className={loading ? styles.refreshing : ''} /> Обновить данные</button>
       </div>
 
       {top3.length > 0 && (
         <div className={styles.top3}>
           {top3.map(u => (
-            <div key={u.user_id} className={styles.topCard}>
-              <div className={styles.rank}><Crown size={16} /> #{u.rank}</div>
+            <div key={u.user_id} className={`${styles.topCard} ${styles[`rank${Math.min(u.rank, 3)}`] || ''}`}>
+              <div className={styles.topCardHead}>
+                <div className={styles.avatarWrap}>{u.avatar_url ? <img src={u.avatar_url} alt="" /> : <UserRound size={22} />}</div>
+                <div className={styles.rank}><Crown size={16} /> Место #{u.rank}</div>
+              </div>
               <div className={styles.name}>{u.user_name}</div>
-              <div className={styles.meta}><Coins size={14} /> {u.coins_balance} · <CheckCircle2 size={14} /> {u.tasks_completed_week}/нед</div>
+              <div className={styles.meta}><span><Coins size={14} /> {u.coins_balance}</span><span><CheckCircle2 size={14} /> {u.tasks_completed_week} за неделю</span></div>
             </div>
           ))}
         </div>
@@ -71,8 +78,6 @@ export default function LeaderboardPage() {
                 <th title="Задач за месяц">Мес</th>
                 <th title="Задач за год">Год</th>
                 <th title="Просрочено"><AlertTriangle size={14} /></th>
-                <th title="Обучение"><GraduationCap size={14} /></th>
-                <th title="Прогресс обучения">Обуч %</th>
                 <th title="Монеты за задачи">Монет за задачи</th>
                 <th title="Анти-чит скор">Anti-cheat</th>
                 <th title="Тесты (ср. %)">Тесты %</th>
@@ -83,15 +88,13 @@ export default function LeaderboardPage() {
               {rows.map(r => (
                 <tr key={r.user_id}>
                   <td>{r.rank}</td>
-                  <td>{r.user_name}</td>
+                  <td><div className={styles.userCell}>{r.avatar_url ? <img src={r.avatar_url} alt="" /> : <span>{r.user_name.slice(0, 1).toUpperCase()}</span>}<strong>{r.user_name}</strong></div></td>
                   <td><strong>{r.coins_balance}</strong></td>
                   <td>{r.tasks_completed_day}</td>
                   <td>{r.tasks_completed_week}</td>
                   <td>{r.tasks_completed_month}</td>
                   <td>{r.tasks_completed_year}</td>
                   <td style={{ color: r.tasks_overdue > 0 ? '#dc2626' : undefined }}>{r.tasks_overdue}</td>
-                  <td>{r.topics_completed}</td>
-                  <td>{r.training_progress_pct}%</td>
                   <td>{r.coins_earned_tasks}</td>
                   <td title={r.anti_cheat_flags.join(', ')} style={{ color: r.anti_cheat_score < 70 ? '#dc2626' : undefined }}>
                     {r.anti_cheat_score}

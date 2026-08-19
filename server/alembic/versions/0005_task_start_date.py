@@ -9,11 +9,16 @@ depends_on = None
 
 
 def upgrade():
-    op.execute(
-        sa.text(
-            "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_date TIMESTAMP WITHOUT TIME ZONE"
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute(
+            sa.text(
+                """
+                ALTER TABLE tasks
+                ADD COLUMN IF NOT EXISTS start_date TIMESTAMP WITHOUT TIME ZONE
+                """
+            )
         )
-    )
 
 
 def downgrade():

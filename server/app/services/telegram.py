@@ -121,3 +121,14 @@ async def notify_new_message(chat_id: str, sender_name: str, iteration_name: str
         f"в чате итерации: {iteration_name}"
     )
     await send_telegram_message(chat_id, text)
+
+
+async def notify_application_tz_approved(telegram_id: str, client_name: str, application_id: str) -> bool:
+    """Консультанту: ТЗ по заявке одобрено руководством."""
+    text = (
+        "✅ <b>Заявка одобрена</b>\n\n"
+        f"Клиент: <b>{client_name}</b>\n"
+        f"ID: <code>{application_id}</code>\n\n"
+        "ТЗ проверено. Можно переходить к распределению задач."
+    )
+    return await send_telegram_message(telegram_id, text)

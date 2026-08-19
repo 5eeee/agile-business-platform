@@ -11,7 +11,21 @@ logger = logging.getLogger(__name__)
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 # Пути, которые не требуют CSRF-проверки (server-to-server вызовы)
-CSRF_EXEMPT_PATHS = {"/api/telegram/webhook"}
+CSRF_EXEMPT_PATHS = {
+    "/api/telegram/webhook",
+    "/api/applications/webhook",  # форма визитки → бэкенд без Origin
+}
+
+
+def _csrf_exempt_path(path: str) -> bool:
+    """Нормализуем слэш в конце — иначе /api/.../webhook/ не попадёт в множество."""
+    norm = path.rstrip("/") or "/"
+    if norm in {p.rstrip("/") or "/" for p in CSRF_EXEMPT_PATHS}:
+        return True
+    # Доп. надёжность для server-to-server webhook
+    if norm.startswith("/api/applications/webhook"):
+        return True
+    return False
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
@@ -34,7 +48,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Пропускаем server-to-server вызовы (Telegram webhook и т.д.)
-        if request.url.path in CSRF_EXEMPT_PATHS:
+        if _csrf_exempt_path(request.url.path):
             return await call_next(request)
 
         origin = request.headers.get("origin")

@@ -1,6 +1,8 @@
 """Celery application for background tasks"""
 import os
+# pyrefly: ignore [missing-import]
 from celery import Celery
+# pyrefly: ignore [missing-import]
 from celery.schedules import crontab
 
 _redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")

@@ -9,7 +9,7 @@ from starlette.responses import Response
 import bcrypt
 
 from app.database import get_db
-from app.models.user import User, UserStatus, UserRole
+from app.models.user import User, UserStatus, UserRole, ADMIN_ROLES
 from app.schemas.user import (
     UserRegister, UserLogin, TokenResponse,
     PasswordChange, PasswordReset, PasswordResetConfirm, UserOut, UserAdminOut
@@ -256,7 +256,7 @@ async def get_me(user: User = Depends(get_current_user), db: AsyncSession = Depe
         select(User).options(selectinload(User.sphere_roles)).where(User.id == user.id)
     )
     user = result.scalar_one()
-    return UserAdminOut.model_validate(user) if user.role == UserRole.ADMIN else UserOut.model_validate(user)
+    return UserAdminOut.model_validate(user) if user.role in ADMIN_ROLES else UserOut.model_validate(user)
 
 
 @router.post("/logout")

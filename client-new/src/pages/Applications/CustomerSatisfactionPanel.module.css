@@ -1,0 +1,23 @@
+.panel { margin-top: 18px; padding: 20px; border: 1px solid var(--color-border); border-radius: 18px; background: var(--color-surface); }
+.head, .head > div, .subhead, .actions { display: flex; align-items: center; }
+.head { justify-content: space-between; gap: 16px; }
+.head > div { gap: 12px; }
+.head h3, .head p { margin: 0; }
+.head p { color: var(--color-text-muted); font-size: 12px; margin-top: 3px; }
+.icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 11px; color: #d97706; background: rgba(245,158,11,.12); }
+.notice { margin-top: 16px; padding: 13px; border-radius: 11px; color: var(--color-text-muted); background: var(--color-bg); }
+.subhead { gap: 8px; margin-top: 20px; font-size: 13px; }
+.subhead > span { margin-left: auto; font-weight: 800; }
+.totalOk { color: #16a34a; }.totalBad { color: #dc2626; }
+.weights { display: grid; gap: 8px; margin-top: 10px; }
+.weights label { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 11px; }
+.weights label > div { display: flex; align-items: center; gap: 5px; }
+.weights input { width: 86px; padding: 7px 9px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg); color: var(--color-text); }
+.actions { justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.link { display: flex; align-items: center; gap: 7px; padding: 10px 12px; margin-top: 12px; border-radius: 10px; background: rgba(99,102,241,.08); color: var(--color-primary); font-size: 12px; overflow-wrap: anywhere; }
+.message { color: #16a34a; font-size: 12px; }
+.reviews { margin-top: 20px; }
+.reviews > p { color: var(--color-text-muted); font-size: 13px; }
+.reviews article { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; padding: 11px 0; border-top: 1px solid var(--color-border); font-size: 13px; }
+.reviews article span { color: #d97706; font-weight: 800; }.reviews article p { margin: 0; }.reviews time { color: var(--color-text-muted); font-size: 11px; }
+@media (max-width: 620px) { .weights label { align-items: flex-start; flex-direction: column; }.actions > button { width: 100%; }.reviews article { grid-template-columns: auto 1fr; }.reviews time { grid-column: 2; } }

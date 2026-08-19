@@ -1,5 +1,20 @@
-import { useState, useEffect } from 'react';
-import { Settings, Pencil, Flame, Trash2, Frown, Coins, ShieldCheck, Trophy } from 'lucide-react';
+import { useState, useEffect, type FormEvent } from 'react';
+import {
+  Coins,
+  Flame,
+  FolderKanban,
+  Frown,
+  Pencil,
+  Search,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+  Trophy,
+  UserCheck,
+  UserRoundCheck,
+  Users,
+} from 'lucide-react';
 import { useAppSelector } from '../../store/hooks';
 import { t } from '../../i18n';
 import api from '../../api/client';
@@ -21,13 +36,13 @@ export default function AdminPage() {
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [stats, setStats] = useState<{ total_users: number; active_users: number; pending_users: number; total_projects: number } | null>(null);
   const [editUser, setEditUser] = useState<User | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', email: '', role: 'user', training_role: '' as string });
+  const [editForm, setEditForm] = useState({ name: '', email: '', role: 'user', department_id: '', manager_id: '' });
 
   // Fire popup
   const [fireTarget, setFireTarget] = useState<User | null>(null);
   const [fireMessage, setFireMessage] = useState('');
 
-  // Sphere roles
+  // Сферы только из SPHERES в types (канонический список). Не подставлять из GET /admin/spheres — старый backend отдаёт 11 строк и затирает UI.
   const [sphereTarget, setSphereTarget] = useState<User | null>(null);
   const [sphereForm, setSphereForm] = useState({ sphere: SPHERES[0] as string, role_title: '' });
   const [searchQuery, setSearchQuery] = useState('');
@@ -65,7 +80,7 @@ export default function AdminPage() {
     setLoading(false);
   };
 
-  const submitCoinGrant = async (e: React.FormEvent) => {
+  const submitCoinGrant = async (e: FormEvent) => {
     e.preventDefault();
     if (!coinGrant.user_id || !coinGrant.reason.trim() || coinGrant.amount <= 0) return;
     setGrantLoading(true);
@@ -88,11 +103,8 @@ export default function AdminPage() {
     { key: 'places', label: 'Места силы' },
     { key: 'music', label: 'Музыка' },
     { key: 'analytics', label: 'Аналитика' },
-    { key: 'training', label: 'Обучение' },
     { key: 'leaderboard', label: 'Лидерборд' },
     { key: 'shop', label: 'Магазин' },
-    { key: 'competency', label: 'Компетенции' },
-    { key: 'assessment', label: 'Тестирование' },
   ];
 
   const loadUserAccess = async (userId: string) => {
@@ -112,7 +124,7 @@ export default function AdminPage() {
     }
   };
 
-  const submitAccessGrant = async (e: React.FormEvent) => {
+  const submitAccessGrant = async (e: FormEvent) => {
     e.preventDefault();
     if (!accessUserId) return;
     const keys = Object.entries(accessSections).filter(([, v]) => v).map(([k]) => k);
@@ -147,13 +159,36 @@ export default function AdminPage() {
 
   const openEdit = (u: User) => {
     setEditUser(u);
-    setEditForm({ name: u.name, email: u.email, role: u.role, training_role: u.training_role || '' });
+    setEditForm({
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      department_id: u.department_id || '',
+      manager_id: u.manager_id || '',
+    });
   };
 
-  const saveEdit = async (e: React.FormEvent) => {
+  const saveEdit = async (e: FormEvent) => {
     e.preventDefault();
     if (!editUser) return;
-    const payload = { ...editForm, training_role: editForm.training_role || null };
+
+    // Enforce selecting department and manager when accepting a person (moving from intern role to staff)
+    if (editForm.role !== 'intern' && editUser.role === 'intern') {
+      if (!editForm.department_id) {
+        window.dispatchEvent(new CustomEvent('api-error', { detail: 'При принятии сотрудника необходимо выбрать отдел' }));
+        return;
+      }
+      if (!editForm.manager_id) {
+        window.dispatchEvent(new CustomEvent('api-error', { detail: 'При принятии сотрудника необходимо выбрать руководителя' }));
+        return;
+      }
+    }
+
+    const payload = {
+      ...editForm,
+      department_id: editForm.department_id || null,
+      manager_id: editForm.manager_id || null,
+    };
     await api.put(`/admin/users/${editUser.id}`, payload);
     setEditUser(null);
     loadAll();
@@ -171,12 +206,17 @@ export default function AdminPage() {
     loadAll();
   };
 
-  const assignSphereRole = async (e: React.FormEvent) => {
+  const assignSphereRole = async (e: FormEvent) => {
     e.preventDefault();
     if (!sphereTarget) return;
-    await api.post(`/admin/users/${sphereTarget.id}/sphere-roles`, sphereForm);
-    setSphereTarget(null);
-    loadAll();
+    try {
+      await api.post(`/admin/users/${sphereTarget.id}/sphere-roles`, sphereForm);
+      setSphereTarget(null);
+      loadAll();
+    } catch (err: unknown) {
+      const d = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      window.dispatchEvent(new CustomEvent('api-error', { detail: typeof d === 'string' ? d : 'Не удалось сохранить роль в сфере' }));
+    }
   };
 
   const statusBadge = (status: string) => {
@@ -191,10 +231,10 @@ export default function AdminPage() {
       {/* Статистика */}
       {loading ? <MetricsSkeleton count={4} /> : stats && (
         <div className={styles.statsRow}>
-          <div className="card"><strong>{stats.total_users}</strong><span>{lang.admin.totalUsers}</span></div>
-          <div className="card"><strong>{stats.active_users}</strong><span>{lang.admin.activeUsers}</span></div>
-          <div className="card"><strong>{stats.pending_users}</strong><span>{lang.admin.pendingUsers}</span></div>
-          <div className="card"><strong>{stats.total_projects}</strong><span>{lang.admin.totalProjects}</span></div>
+          <div className={`${styles.statCard} ${styles.statUsers}`}><span className={styles.statIcon}><Users size={20} /></span><div><strong>{stats.total_users}</strong><span>{lang.admin.totalUsers}</span><small>Все аккаунты компании</small></div></div>
+          <div className={`${styles.statCard} ${styles.statActive}`}><span className={styles.statIcon}><UserCheck size={20} /></span><div><strong>{stats.active_users}</strong><span>{lang.admin.activeUsers}</span><small>Могут работать сейчас</small></div></div>
+          <div className={`${styles.statCard} ${styles.statPending}`}><span className={styles.statIcon}><UserRoundCheck size={20} /></span><div><strong>{stats.pending_users}</strong><span>{lang.admin.pendingUsers}</span><small>Ожидают решения</small></div></div>
+          <div className={`${styles.statCard} ${styles.statProjects}`}><span className={styles.statIcon}><FolderKanban size={20} /></span><div><strong>{stats.total_projects}</strong><span>{lang.admin.totalProjects}</span><small>Рабочие пространства</small></div></div>
         </div>
       )}
 
@@ -212,19 +252,16 @@ export default function AdminPage() {
       {tab === 'users' && (
         <>
           <div className={styles.tableWrap}>
-            <input
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder={lang.admin.search}
-              style={{ width: '100%', padding: '8px 12px', marginBottom: 12, borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', fontSize: 14 }}
-            />
+            <label className={styles.adminSearch}>
+              <Search size={17} aria-hidden />
+              <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder={lang.admin.search} />
+            </label>
             <table className={styles.table}>
             <thead>
               <tr>
                 <th>{lang.admin.name}</th>
                 <th>Email</th>
                 <th>{lang.admin.role}</th>
-                <th>{(lang.training as Record<string, string>).trainingRole}</th>
                 <th>{lang.admin.status}</th>
                 <th>{lang.admin.sphereRoles}</th>
                 <th>{lang.admin.actions}</th>
@@ -244,8 +281,7 @@ export default function AdminPage() {
                     </div>
                   </td>
                   <td>{u.email}</td>
-                  <td><span className={`badge ${u.role === 'admin' ? 'badge-error' : u.role === 'intern' ? 'badge-warning' : 'badge-primary'}`}>{u.role}</span></td>
-                  <td>{u.training_role ? <span className="badge badge-warning" style={{ fontSize: 11 }}>{u.training_role === 'training_editor' ? (lang.training as Record<string, string>).trainingEditor : (lang.training as Record<string, string>).intern}</span> : '—'}</td>
+                  <td><span className={`badge ${u.role === 'admin' || u.role === 'owner' ? 'badge-error' : u.role === 'intern' ? 'badge-warning' : 'badge-primary'}`}>{(lang.roles as Record<string, string>)[u.role] || u.role}</span></td>
                   <td>{statusBadge(u.status)}</td>
                   <td>
                     {u.sphere_roles?.map(sr => (
@@ -253,7 +289,15 @@ export default function AdminPage() {
                         {sr.sphere}: {sr.role_title}
                       </span>
                     ))}
-                    <button className="btn btn-ghost btn-sm" onClick={() => setSphereTarget(u)} title={lang.admin.assignSphereRole} aria-label={lang.admin.assignSphereRole}>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => {
+                        setSphereTarget(u);
+                        setSphereForm({ sphere: SPHERES[0], role_title: '' });
+                      }}
+                      title={lang.admin.assignSphereRole}
+                      aria-label={lang.admin.assignSphereRole}
+                    >
                       <Settings size={16} />
                     </button>
                   </td>
@@ -279,21 +323,24 @@ export default function AdminPage() {
           </div>
 
           <div className={styles.toolsGrid}>
-            <div className={styles.toolCard}>
-              <h3><Coins size={16} /> Начислить Agile.Coins</h3>
-              <form onSubmit={submitCoinGrant} className={styles.form}>
-                <select value={coinGrant.user_id} onChange={e => setCoinGrant({ ...coinGrant, user_id: e.target.value })} required>
-                  <option value="">Выберите пользователя</option>
-                  {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
-                </select>
-                <input type="number" min={1} max={10000} value={coinGrant.amount} onChange={e => setCoinGrant({ ...coinGrant, amount: Number(e.target.value) })} required />
-                <textarea value={coinGrant.reason} onChange={e => setCoinGrant({ ...coinGrant, reason: e.target.value })} rows={3} placeholder="Обязательно укажите за что и когда" required />
-                <button className="btn btn-primary btn-sm" type="submit" disabled={grantLoading}>{grantLoading ? 'Сохранение...' : 'Начислить'}</button>
+            <div className={`${styles.toolCard} ${styles.coinToolCard}`}>
+              <div className={styles.toolCardHeader}>
+                <span className={styles.toolCardIcon}><Coins size={20} /></span>
+                <div><h3>Начислить Agile.Coins</h3><p>Зафиксируйте поощрение сотрудника с обязательным основанием.</p></div>
+              </div>
+              <form onSubmit={submitCoinGrant} className={`${styles.form} ${styles.toolForm}`}>
+                <label><span>Сотрудник</span><select value={coinGrant.user_id} onChange={e => setCoinGrant({ ...coinGrant, user_id: e.target.value })} required>
+                    <option value="">Выберите пользователя</option>
+                    {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
+                  </select></label>
+                <label><span>Количество монет</span><div className={styles.coinAmount}><Sparkles size={17} aria-hidden /><input type="number" min={1} max={10000} value={coinGrant.amount} onChange={e => setCoinGrant({ ...coinGrant, amount: Number(e.target.value) })} required /></div></label>
+                <label><span>Основание начисления</span><textarea value={coinGrant.reason} onChange={e => setCoinGrant({ ...coinGrant, reason: e.target.value })} rows={3} placeholder="Например: досрочное завершение квартальной цели" required /></label>
+                <button className="btn btn-primary" type="submit" disabled={grantLoading}>{grantLoading ? 'Сохранение...' : 'Начислить монеты'}</button>
               </form>
             </div>
 
             <div className={styles.toolCard}>
-              <h3><ShieldCheck size={16} /> Доступы к разделам</h3>
+              <div className={styles.toolCardHeader}><span className={styles.toolCardIcon}><ShieldCheck size={20} /></span><div><h3>Доступы к разделам</h3><p>Настройте рабочее пространство конкретного сотрудника.</p></div></div>
               <form onSubmit={submitAccessGrant} className={styles.form}>
                 <select value={accessUserId} onChange={e => { setAccessUserId(e.target.value); loadUserAccess(e.target.value); }} required>
                   <option value="">Выберите пользователя</option>
@@ -314,7 +361,7 @@ export default function AdminPage() {
             </div>
 
             <div className={styles.toolCard}>
-              <h3><Trophy size={16} /> Топ стажёров по KPI</h3>
+              <div className={styles.toolCardHeader}><span className={styles.toolCardIcon}><Trophy size={20} /></span><div><h3>Рейтинг сотрудников</h3><p>Текущие позиции по результатам и Agile.Coins.</p></div></div>
               {leaderboard.length === 0 ? (
                 <p className={styles.empty}>Нет данных</p>
               ) : (
@@ -360,15 +407,33 @@ export default function AdminPage() {
             <form onSubmit={saveEdit} className={styles.form}>
               <input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} placeholder={lang.admin.name} required />
               <input value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} placeholder="Email" type="email" required />
+              <label style={{ fontSize: '13px', display: 'block', marginTop: '8px', color: 'var(--color-text-secondary)' }}>Роль на платформе</label>
               <select value={editForm.role} onChange={e => setEditForm({ ...editForm, role: e.target.value })}>
                 <option value="user">{lang.roles.user}</option>
                 <option value="intern">{lang.roles.intern}</option>
+                <option value="consultant">{lang.roles.consultant}</option>
                 <option value="admin">{lang.roles.admin}</option>
+                <option value="owner">{lang.roles.owner}</option>
+                <option value="deputy_owner">{lang.roles.deputy_owner}</option>
               </select>
-              <select value={editForm.training_role} onChange={e => setEditForm({ ...editForm, training_role: e.target.value })}>
-                <option value="">{(lang.training as Record<string, string>).noRole}</option>
-                <option value="intern">{(lang.training as Record<string, string>).intern}</option>
-                <option value="training_editor">{(lang.training as Record<string, string>).trainingEditor}</option>
+              <label style={{ fontSize: '13px', display: 'block', marginTop: '8px', color: 'var(--color-text-secondary)' }}>Отдел</label>
+              <select value={editForm.department_id} onChange={e => setEditForm({ ...editForm, department_id: e.target.value })}>
+                <option value="">-- Выберите отдел --</option>
+                <option value="Разработка">Разработка</option>
+                <option value="Маркетинг">Маркетинг</option>
+                <option value="Дизайн">Дизайн</option>
+                <option value="Продажи">Продажи</option>
+                <option value="Аналитика">Аналитика</option>
+                <option value="Бухгалтерия">Бухгалтерия</option>
+                <option value="Кадры">Кадры</option>
+                <option value="Управление">Управление</option>
+              </select>
+              <label style={{ fontSize: '13px', display: 'block', marginTop: '8px', color: 'var(--color-text-secondary)' }}>Руководитель</label>
+              <select value={editForm.manager_id} onChange={e => setEditForm({ ...editForm, manager_id: e.target.value })}>
+                <option value="">-- Выберите руководителя --</option>
+                {users.filter(u => u.id !== editUser.id && u.role !== 'intern' && u.status === 'active').map(u => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
               </select>
               <div className={styles.formActions}>
                 <button type="button" className="btn btn-secondary" onClick={() => setEditUser(null)}>{lang.common.cancel}</button>
@@ -412,7 +477,9 @@ export default function AdminPage() {
             <p>{sphereTarget.name}</p>
             <form onSubmit={assignSphereRole} className={styles.form}>
               <select value={sphereForm.sphere} onChange={e => setSphereForm({ ...sphereForm, sphere: e.target.value })}>
-                {SPHERES.map(s => <option key={s} value={s}>{s}</option>)}
+                {SPHERES.map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
               </select>
               <input placeholder={lang.admin.roleTitle} value={sphereForm.role_title} onChange={e => setSphereForm({ ...sphereForm, role_title: e.target.value })} required />
               <div className={styles.formActions}>

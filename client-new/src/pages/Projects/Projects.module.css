@@ -154,3 +154,42 @@
   justify-content: flex-end;
   margin-top: 4px;
 }
+
+@media (max-width: 640px) {
+  .hero {
+    padding: 26px 20px 24px;
+    margin-bottom: 22px;
+    border-radius: 18px;
+  }
+
+  .heroTitle {
+    font-size: 23px;
+  }
+
+  .heroSubtitle {
+    font-size: 14px;
+    margin-bottom: 18px;
+  }
+
+  .heroActions,
+  .heroActions > button,
+  .quickRow,
+  .quickCard {
+    width: 100%;
+  }
+
+  .quickCard {
+    min-width: 0;
+    max-width: none;
+    flex-basis: auto;
+    padding: 14px;
+  }
+
+  .formActions {
+    flex-direction: column-reverse;
+  }
+
+  .formActions > button {
+    width: 100%;
+  }
+}

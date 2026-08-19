@@ -32,6 +32,7 @@ export default function EventsPage() {
     end_date: '',
     location: '',
     iteration_id: '',
+    event_kind: 'internal' as 'internal' | 'external',
   });
   const [editEvent, setEditEvent] = useState<Event | null>(null);
   const [editForm, setEditForm] = useState({
@@ -40,6 +41,7 @@ export default function EventsPage() {
     start_date: '',
     end_date: '',
     location: '',
+    event_kind: 'internal' as 'internal' | 'external',
   });
 
   // Event chat  
@@ -70,9 +72,10 @@ export default function EventsPage() {
       ...form,
       end_date: form.end_date || null,
       iteration_id: form.iteration_id || null,
+      event_kind: form.event_kind,
     });
     setShowForm(false);
-    setForm({ title: '', description: '', start_date: '', end_date: '', location: '', iteration_id: '' });
+    setForm({ title: '', description: '', start_date: '', end_date: '', location: '', iteration_id: '', event_kind: 'internal' });
     loadEvents();
   };
 
@@ -101,12 +104,14 @@ export default function EventsPage() {
 
   const openEditEvent = (ev: Event) => {
     setEditEvent(ev);
+    const k = ev.event_kind === 'external' ? 'external' : 'internal';
     setEditForm({
       title: ev.title,
       description: ev.description || '',
       start_date: ev.start_date?.slice(0, 16) || '',
       end_date: ev.end_date?.slice(0, 16) || '',
       location: ev.location || '',
+      event_kind: k,
     });
   };
 
@@ -116,6 +121,7 @@ export default function EventsPage() {
     await api.put(`/events/${editEvent.id}`, {
       ...editForm,
       end_date: editForm.end_date || null,
+      event_kind: editForm.event_kind,
     });
     setEditEvent(null);
     loadEvents();
@@ -148,6 +154,95 @@ export default function EventsPage() {
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
   };
 
+  const eventKindOf = (ev: Event) => (ev.event_kind === 'external' ? 'external' : 'internal');
+
+  const renderEventCard = (ev: Event) => {
+    const myStatus = ev.participants?.find(p => p.user_id === user?.id)?.status;
+    const parts = ev.participants ?? [];
+    const attendingPeople = parts.filter(p => p.status === 'attending');
+    const notAttendingPeople = parts.filter(p => p.status === 'not_attending');
+    const attendCount = attendingPeople.length;
+    const k = eventKindOf(ev);
+
+    return (
+      <div key={ev.id} className={styles.cardWrap}>
+        <div className={styles.cardKindLabel}>{k === 'external' ? lang.events.external : lang.events.internal}</div>
+        <div className={`card ${styles.eventCard}`}>
+          <div className={styles.eventDate}>
+            <CalendarDays size={16} style={{ marginRight: 6 }} />{formatDate(ev.start_date)}
+            {ev.end_date && <> — {formatDate(ev.end_date)}</>}
+          </div>
+          <h3>{ev.title}</h3>
+          {ev.description && <p className={styles.eventDesc}>{ev.description}</p>}
+          {ev.location && <p className={styles.eventLocation}><MapPin size={14} style={{ marginRight: 6 }} />{ev.location}</p>}
+
+          <div className={styles.eventMeta}>
+            <span className="badge badge-primary">
+              {attendCount} {lang.events.attending}
+            </span>
+          </div>
+
+          {ev.photo_url && <img src={ev.photo_url} alt="" className={styles.eventPhoto} />}
+
+          <div className={styles.eventActions}>
+            <button
+              className={`btn btn-sm ${myStatus === 'attending' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => participate(ev.id, 'attending')}
+            >
+              {lang.events.attend}
+            </button>
+            <button
+              className={`btn btn-sm ${myStatus === 'not_attending' ? 'btn-danger' : 'btn-secondary'}`}
+              onClick={() => participate(ev.id, 'not_attending')}
+            >
+              {lang.events.notAttend}
+            </button>
+            <label className="btn btn-sm btn-ghost" style={{ cursor: 'pointer' }}>
+              <Camera size={16} />
+              <input type="file" accept="image/*" hidden onChange={e => uploadEventPhoto(ev.id, e)} />
+            </label>
+            {(ev.creator_id === user?.id || (user && ['admin', 'owner', 'deputy_owner'].includes(user.role))) && <>
+              <button className="btn btn-sm btn-ghost" onClick={() => openEditEvent(ev)} aria-label={lang.common.edit}><Pencil size={16} /></button>
+              <button className="btn btn-sm btn-ghost" onClick={() => deleteEvent(ev.id)} aria-label={lang.common.delete}><Trash2 size={16} /></button>
+            </>}
+          </div>
+
+          {(attendingPeople.length > 0 || notAttendingPeople.length > 0) && (
+            <div className={styles.participantsBlock}>
+              {attendingPeople.length > 0 && (
+                <div className={styles.participantGroup}>
+                  <div className={styles.participantGroupTitle}>{lang.events.attendingListTitle}</div>
+                  <div className={styles.participants}>
+                    {attendingPeople.map(p => (
+                      <span key={p.user_id} className={styles.participant}>
+                        <UserRound size={14} style={{ marginRight: 6 }} />{p.user_name ?? p.user_id}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {notAttendingPeople.length > 0 && (
+                <div className={`${styles.participantGroup} ${styles.participantGroupDeclined}`}>
+                  <div className={styles.participantGroupTitle}>{lang.events.notAttendingListTitle}</div>
+                  <div className={styles.participants}>
+                    {notAttendingPeople.map(p => (
+                      <span key={p.user_id} className={styles.participant}>
+                        <UserRound size={14} style={{ marginRight: 6 }} />{p.user_name ?? p.user_id}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const internalEvents = events.filter(e => eventKindOf(e) === 'internal');
+  const externalEvents = events.filter(e => eventKindOf(e) === 'external');
+
   return (
     <div className={`${styles.page} page-enter`}>
       <div className={styles.header}>
@@ -158,68 +253,20 @@ export default function EventsPage() {
       </div>
 
       {loading ? <CardSkeleton count={3} /> : (
-      <div className={styles.grid}>
-        {events.map(ev => {
-          const myStatus = ev.participants?.find(p => p.user_id === user?.id)?.status;
-          const attendCount = ev.participants?.filter(p => p.status === 'attending').length || 0;
-
-          return (
-            <div key={ev.id} className={`card ${styles.eventCard}`}>
-              <div className={styles.eventDate}>
-                <CalendarDays size={16} style={{ marginRight: 6 }} />{formatDate(ev.start_date)}
-                {ev.end_date && <> — {formatDate(ev.end_date)}</>}
-              </div>
-              <h3>{ev.title}</h3>
-              {ev.description && <p className={styles.eventDesc}>{ev.description}</p>}
-              {ev.location && <p className={styles.eventLocation}><MapPin size={14} style={{ marginRight: 6 }} />{ev.location}</p>}
-
-              <div className={styles.eventMeta}>
-                <span className="badge badge-primary">
-                  {attendCount} {lang.events.attending}
-                </span>
-              </div>
-
-              {ev.photo_url && <img src={ev.photo_url} alt="" className={styles.eventPhoto} />}
-
-              <div className={styles.eventActions}>
-                <button
-                  className={`btn btn-sm ${myStatus === 'attending' ? 'btn-primary' : 'btn-secondary'}`}
-                  onClick={() => participate(ev.id, 'attending')}
-                >
-                  {lang.events.attend}
-                </button>
-                <button
-                  className={`btn btn-sm ${myStatus === 'not_attending' ? 'btn-danger' : 'btn-secondary'}`}
-                  onClick={() => participate(ev.id, 'not_attending')}
-                >
-                  {lang.events.notAttend}
-                </button>
-                <button className="btn btn-sm btn-ghost" onClick={() => openChat(ev.id)}>
-                  {lang.chat.title}
-                </button>
-                <label className="btn btn-sm btn-ghost" style={{ cursor: 'pointer' }}>
-                  <Camera size={16} />
-                  <input type="file" accept="image/*" hidden onChange={e => uploadEventPhoto(ev.id, e)} />
-                </label>
-                {(ev.creator_id === user?.id || user?.role === 'admin') && <>
-                  <button className="btn btn-sm btn-ghost" onClick={() => openEditEvent(ev)} aria-label={lang.common.edit}><Pencil size={16} /></button>
-                  <button className="btn btn-sm btn-ghost" onClick={() => deleteEvent(ev.id)} aria-label={lang.common.delete}><Trash2 size={16} /></button>
-                </>}
-              </div>
-
-              {/* Participants list */}
-              {ev.participants && ev.participants.length > 0 && (
-                <div className={styles.participants}>
-                  {ev.participants.filter(p => p.status === 'attending').map(p => (
-                    <span key={p.user_id} className={styles.participant}>
-                      <UserRound size={14} style={{ marginRight: 6 }} />{p.user_name}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
+      <div className={styles.splitLayout}>
+        <section className={styles.column} aria-labelledby="events-internal-heading">
+          <h2 id="events-internal-heading" className={styles.columnHeading}>{lang.events.internalColumn}</h2>
+          <div className={styles.columnInner}>
+            {internalEvents.map(renderEventCard)}
+          </div>
+        </section>
+        <div className={styles.columnDivider} aria-hidden />
+        <section className={styles.column} aria-labelledby="events-external-heading">
+          <h2 id="events-external-heading" className={styles.columnHeading}>{lang.events.externalColumn}</h2>
+          <div className={styles.columnInner}>
+            {externalEvents.map(renderEventCard)}
+          </div>
+        </section>
       </div>
       )}
 
@@ -237,6 +284,15 @@ export default function EventsPage() {
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h2>{lang.events.create}</h2>
             <form onSubmit={create} className={styles.form}>
+              <label>{lang.events.eventKind}</label>
+              <select
+                value={form.event_kind}
+                onChange={e => setForm({ ...form, event_kind: e.target.value as 'internal' | 'external' })}
+                className={styles.eventKindSelect}
+              >
+                <option value="internal">{lang.events.internal}</option>
+                <option value="external">{lang.events.external}</option>
+              </select>
               <input placeholder={lang.events.eventTitle} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} required />
               <textarea placeholder={lang.events.description} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={3} />
               <label>{lang.events.startDate}</label>
@@ -259,6 +315,15 @@ export default function EventsPage() {
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h2>{lang.events.edit}</h2>
             <form onSubmit={saveEditEvent} className={styles.form}>
+              <label>{lang.events.eventKind}</label>
+              <select
+                value={editForm.event_kind}
+                onChange={e => setEditForm({ ...editForm, event_kind: e.target.value as 'internal' | 'external' })}
+                className={styles.eventKindSelect}
+              >
+                <option value="internal">{lang.events.internal}</option>
+                <option value="external">{lang.events.external}</option>
+              </select>
               <input placeholder={lang.events.eventTitle} value={editForm.title} onChange={e => setEditForm({ ...editForm, title: e.target.value })} required />
               <textarea placeholder={lang.events.description} value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} rows={3} />
               <label>{lang.events.startDate}</label>

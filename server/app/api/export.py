@@ -20,7 +20,7 @@ from app.database import get_db
 from app.models.retrospective import Retrospective, RetrospectiveAnswer
 from app.models.iteration import Iteration
 from app.models.task import Task
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, ADMIN_ROLES
 from app.models.project import ProjectMember
 from app.middleware.auth import get_current_user
 
@@ -47,7 +47,7 @@ async def export_retrospective_pdf(
     iteration = iter_result.scalar_one_or_none()
     if not iteration:
         raise HTTPException(status_code=404, detail="Итерация не найдена")
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         member_result = await db.execute(
             select(ProjectMember).where(ProjectMember.project_id == iteration.project_id, ProjectMember.user_id == user.id)
         )
@@ -116,7 +116,7 @@ async def export_iteration_pdf(
         raise HTTPException(status_code=404, detail="Iteration not found")
 
     # Verify project membership
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         member_result = await db.execute(
             select(ProjectMember).where(ProjectMember.project_id == iteration.project_id, ProjectMember.user_id == user.id)
         )

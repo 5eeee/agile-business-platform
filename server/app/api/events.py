@@ -40,6 +40,7 @@ async def list_events(limit: int = 50, offset: int = 0, db: AsyncSession = Depen
         
         out.append(EventOut(
             id=e.id, title=e.title, description=e.description, location=e.location,
+            event_kind=e.event_kind,
             photo_url=e.photo_url, start_date=e.event_date, event_date=e.event_date,
             creator_id=e.creator_id, is_active=e.is_active,
             participant_count=attending_count,
@@ -58,13 +59,15 @@ async def create_event(data: EventCreate, db: AsyncSession = Depends(get_db), us
     event = Event(
         title=data.title, description=data.description, location=data.location,
         event_date=event_date, creator_id=user.id,
+        event_kind=data.event_kind,
     )
     db.add(event)
     await db.commit()
     await db.refresh(event)
     return EventOut(
         id=event.id, title=event.title, description=event.description,
-        location=event.location, photo_url=event.photo_url,
+        location=event.location, event_kind=event.event_kind,
+        photo_url=event.photo_url,
         start_date=event.event_date, event_date=event.event_date,
         creator_id=event.creator_id, is_active=event.is_active, created_at=event.created_at,
     )
@@ -85,7 +88,8 @@ async def update_event(event_id: uuid.UUID, data: EventUpdate, db: AsyncSession 
     await db.refresh(event)
     return EventOut(
         id=event.id, title=event.title, description=event.description,
-        location=event.location, photo_url=event.photo_url,
+        location=event.location, event_kind=event.event_kind,
+        photo_url=event.photo_url,
         start_date=event.event_date, event_date=event.event_date,
         creator_id=event.creator_id, is_active=event.is_active, created_at=event.created_at,
     )

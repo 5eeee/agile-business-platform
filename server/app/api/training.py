@@ -13,7 +13,7 @@ from typing import Optional
 
 from app.database import get_db
 from app.middleware.auth import get_current_user, require_admin
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, ADMIN_ROLES
 from app.models.notification import Notification
 from app.models.training import (
     TrainingCourse, TrainingTopic, TrainingContent,
@@ -76,7 +76,7 @@ async def grant_coin_once(
 
 def require_training_editor(user: User = Depends(get_current_user)) -> User:
     """Доступ для admin и training_editor"""
-    if user.role == UserRole.ADMIN:
+    if user.role in ADMIN_ROLES:
         return user
     if user.training_role == "training_editor":
         return user
@@ -88,7 +88,7 @@ def require_training_editor(user: User = Depends(get_current_user)) -> User:
 @router.get("/courses", response_model=list[CourseOut])
 async def list_courses(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     """Список курсов. Редакторы/админы видят все. Стажёры — только назначенные и опубликованные."""
-    is_editor = user.role == UserRole.ADMIN or getattr(user, 'training_role', None) == "training_editor"
+    is_editor = user.role in ADMIN_ROLES or getattr(user, 'training_role', None) == "training_editor"
     q = select(TrainingCourse).options(selectinload(TrainingCourse.topics))
     if not is_editor:
         assigned_ids = select(CourseAssignment.course_id).where(CourseAssignment.user_id == user.id)
@@ -222,7 +222,7 @@ async def list_topics(course_id: uuid.UUID, db: AsyncSession = Depends(get_db), 
 
         prev_unlocked = topic_unlocked and topic_completed
 
-    is_editor = user.role == UserRole.ADMIN or getattr(user, 'training_role', None) == "training_editor"
+    is_editor = user.role in ADMIN_ROLES or getattr(user, 'training_role', None) == "training_editor"
 
     out = []
     for t in topics:
@@ -277,7 +277,7 @@ async def get_topic_detail(topic_id: uuid.UUID, db: AsyncSession = Depends(get_d
     topic = result.scalar_one_or_none()
     if not topic:
         raise HTTPException(404, "Тема не найдена")
-    is_editor = user.role == UserRole.ADMIN or getattr(user, 'training_role', None) == "training_editor"
+    is_editor = user.role in ADMIN_ROLES or getattr(user, 'training_role', None) == "training_editor"
     if not is_editor:
         assigned = await db.execute(
             select(CourseAssignment.id).where(
@@ -597,7 +597,7 @@ async def submit_answer(
     if not content and not file:
         raise HTTPException(400, "Нужно отправить текст или файл")
 
-    is_editor = user.role == UserRole.ADMIN or getattr(user, 'training_role', None) == "training_editor"
+    is_editor = user.role in ADMIN_ROLES or getattr(user, 'training_role', None) == "training_editor"
     if not is_editor:
         task_res_check = await db.execute(
             select(TrainingTask).options(selectinload(TrainingTask.topic)).where(TrainingTask.id == task_id)
@@ -632,7 +632,7 @@ async def submit_answer(
 
     editors_q = await db.execute(
         select(User.id).where(
-            (User.training_role == "training_editor") | (User.role == UserRole.ADMIN)
+            (User.training_role == "training_editor") | (User.role.in_(ADMIN_ROLES))
         )
     )
     editor_ids_for_tg = []

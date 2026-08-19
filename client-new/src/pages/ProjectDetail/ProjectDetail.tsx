@@ -15,12 +15,8 @@ import {
   BarChart3,
   Loader2,
   Send,
-  LayoutGrid,
   PanelRightOpen,
-  PanelRightClose,
   MoreVertical,
-  Star,
-  Bell,
   Search,
   ChevronLeft,
   ChevronDown,
@@ -45,7 +41,49 @@ import axios, { type AxiosError } from 'axios';
 import type { Project, Iteration, Task, User, ChatMessage, BoardColumn } from '../../types';
 import { TASK_STATUSES, TASK_PRIORITIES, SPHERES } from '../../types';
 import styles from './ProjectDetail.module.css';
-import { SubtasksPanel } from './ProjectViews';
+import { SubtasksPanel } from './SubtasksPanel';
+
+function sameUserId(a: string | undefined, b: string | undefined): boolean {
+  return String(a ?? '') === String(b ?? '');
+}
+
+function getTaskAssigneeIds(t: Pick<Task, 'assignee_id' | 'assignee_ids'>): string[] {
+  if (t.assignee_ids && t.assignee_ids.length > 0) return t.assignee_ids.map(x => String(x));
+  if (t.assignee_id) return [String(t.assignee_id)];
+  return [];
+}
+
+/** Порядок как в списке участников проекта — стабильно для API и отображения. */
+function orderAssigneeIdsForApi(memberList: User[], ids: string[]): string[] {
+  const want = new Set(ids.map(x => String(x)));
+  const ordered: string[] = [];
+  for (const m of memberList) {
+    if (want.has(String(m.id))) ordered.push(m.id);
+  }
+  for (const id of ids) {
+    if (!ordered.some(o => sameUserId(o, id))) ordered.push(id);
+  }
+  return ordered;
+}
+
+function cardAssigneeEntries(task: Task, memberList: User[]): { id: string; name: string }[] {
+  const ids = getTaskAssigneeIds(task);
+  return ids.map((tid, i) => {
+    const fromList = task.assignee_names?.[i];
+    const name = fromList?.trim()
+      ? fromList
+      : memberList.find(m => sameUserId(m.id, tid))?.name || '?';
+    return { id: tid, name };
+  });
+}
+
+function assigneeSortKey(task: Task): string {
+  const fromNames = task.assignee_names?.filter((n): n is string => Boolean(n?.trim()));
+  if (fromNames?.length) return fromNames.join(', ');
+  return task.assignee_name || '';
+}
+
+const MOBILE_FILTER_LABELS: Record<string, string> = { ru: 'Фильтры', ka: 'ფილტრები', en: 'Filters' };
 
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -53,18 +91,20 @@ export default function ProjectDetailPage() {
   const { user: currentUser } = useAppSelector(s => s.auth);
   const { language } = useAppSelector(s => s.ui);
   const lang = t(language);
-  const LOCALE_MAP: Record<string, string> = { ru: 'ru-RU', ka: 'ka-GE', en: 'en-US', ar: 'ar-SA' };
+  const LOCALE_MAP: Record<string, string> = { ru: 'ru-RU', ka: 'ka-GE', en: 'en-US' };
 
   const [project, setProject] = useState<Project | null>(null);
   const [iterations, setIterations] = useState<Iteration[]>([]);
   const [selectedIteration, setSelectedIteration] = useState<Iteration | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [members, setMembers] = useState<User[]>([]);
-  const [workspaceTab, setWorkspaceTab] = useState<'board'>('board');
+  const workspaceTab = 'board' as const;
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [taskDetailTab, setTaskDetailTab] = useState<'chat' | 'info' | 'desc' | 'sub'>('chat');
   const [descDraft, setDescDraft] = useState('');
   const [workspaceSearch, setWorkspaceSearch] = useState('');
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [filterDeadline, setFilterDeadline] = useState('');
 
   const [showIterForm, setShowIterForm] = useState(false);
@@ -75,6 +115,14 @@ export default function ProjectDetailPage() {
   const [inlineTaskTitle, setInlineTaskTitle] = useState('');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [comment, setComment] = useState('');
+  const [showKpiReview, setShowKpiReview] = useState(false);
+  const [kpiDecision, setKpiDecision] = useState<'in_time' | 'overdue' | 'rework'>('in_time');
+  const [kpiHasExcuse, setKpiHasExcuse] = useState(false);
+  const [kpiExcuseReason, setKpiExcuseReason] = useState('');
+  const [kpiReturnReason, setKpiReturnReason] = useState('requirements');
+  const [kpiComment, setKpiComment] = useState('');
+  const [kpiBusy, setKpiBusy] = useState(false);
+  const [kpiFeedback, setKpiFeedback] = useState<string | null>(null);
 
   const iterScrollRef = useRef<HTMLDivElement>(null);
 
@@ -146,10 +194,13 @@ export default function ProjectDetailPage() {
   const [renamingTaskTitle, setRenamingTaskTitle] = useState('');
   const taskCoverRef = useRef<HTMLInputElement>(null);
   const [taskCoverTargetId, setTaskCoverTargetId] = useState<string | null>(null);
+  const workspaceSearchRef = useRef<HTMLInputElement>(null);
+  const linkedTaskOpenedRef = useRef<string | null>(null);
 
   // Sticker popup state
   const [stickerMenuId, setStickerMenuId] = useState<string | null>(null);
   const [stickerSub, setStickerSub] = useState<'assignee' | 'deadline' | 'priority' | null>(null);
+  const [stickerAssigneeIds, setStickerAssigneeIds] = useState<string[]>([]);
   const [stickerMenuPos, setStickerMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [stickerStartDate, setStickerStartDate] = useState('');
   const [stickerDeadline, setStickerDeadline] = useState('');
@@ -169,7 +220,6 @@ export default function ProjectDetailPage() {
   const [filterAssignee, setFilterAssignee] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
   const [openFilterDropdown, setOpenFilterDropdown] = useState<'assignee' | 'deadline' | 'priority' | null>(null);
-  const [filterMyTasks, setFilterMyTasks] = useState(false);
   const filterDropdownRef = useRef<HTMLDivElement>(null);
   const columnsScrollRef = useRef<HTMLDivElement>(null);
 
@@ -209,10 +259,9 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!dragChatRef.current) return;
-      const rtl = document.documentElement.getAttribute('dir') === 'rtl';
       const max = window.innerWidth * 0.5;
       const min = 280;
-      const w = rtl ? e.clientX : window.innerWidth - e.clientX;
+      const w = window.innerWidth - e.clientX;
       setChatPanelWidth(Math.min(max, Math.max(min, w)));
     };
     const onUp = () => {
@@ -246,6 +295,8 @@ export default function ProjectDetailPage() {
     return new Date(deadline).toDateString() === new Date().toDateString();
   };
 
+  const getTaskEffectiveDeadline = (task: Pick<Task, 'start_date' | 'deadline'>) => task.deadline || task.start_date;
+
   // Close filter dropdown on outside click
   useEffect(() => {
     if (!openFilterDropdown) return;
@@ -272,10 +323,15 @@ export default function ProjectDetailPage() {
   }, [iterContextMenuId]);
 
   const filteredTasks = tasks.filter(task => {
-    if (filterMyTasks && currentUser && task.assignee_id !== currentUser.id) return false;
-    if (filterAssignee && task.assignee_id !== filterAssignee) return false;
+    const aIds = getTaskAssigneeIds(task);
+    if (filterAssignee && !aIds.some(x => sameUserId(x, filterAssignee))) return false;
     if (filterPriority && task.priority !== filterPriority) return false;
-    if (workspaceSearch && !task.title.toLowerCase().includes(workspaceSearch.toLowerCase())) return false;
+    if (workspaceSearch) {
+      const q = workspaceSearch.toLowerCase();
+      const inTitle = task.title.toLowerCase().includes(q);
+      const inDesc = (task.description || '').toLowerCase().includes(q);
+      if (!inTitle && !inDesc) return false;
+    }
     if (filterDeadline === 'overdue' && !isOverdue(getTaskEffectiveDeadline(task))) return false;
     if (filterDeadline === 'today' && !isDueToday(getTaskEffectiveDeadline(task))) return false;
     return true;
@@ -283,13 +339,15 @@ export default function ProjectDetailPage() {
 
   const filteredTaskIds = useMemo(() => new Set(filteredTasks.map(t => t.id)), [filteredTasks]);
 
+  /** Задача или любой её потомок проходит текущие фильтры (для дерева на доске). */
+  const subtreeMatchesFilter = (taskId: string): boolean => {
+    if (filteredTaskIds.has(taskId)) return true;
+    return tasks.some(t => t.parent_id === taskId && subtreeMatchesFilter(t.id));
+  };
+
   const rootVisibleInColumn = (root: Task, columnId: string): boolean => {
     if (root.parent_id || root.board_column_id !== columnId) return false;
-    const dfs = (id: string): boolean => {
-      if (filteredTaskIds.has(id)) return true;
-      return tasks.filter(x => x.parent_id === id).some(c => dfs(c.id));
-    };
-    return dfs(root.id);
+    return subtreeMatchesFilter(root.id);
   };
 
   const COLUMN_ACCENTS = ['#3b82f6', '#f97316', '#14b8a6', '#a855f7', '#eab308'];
@@ -319,8 +377,6 @@ export default function ProjectDetailPage() {
     return end || start || null;
   };
 
-  const getTaskEffectiveDeadline = (task: Pick<Task, 'start_date' | 'deadline'>) => task.deadline || task.start_date;
-
   const getFloatingMenuPosition = useCallback((target: HTMLElement, menuWidth: number, menuHeight: number) => {
     const rect = target.getBoundingClientRect();
     const left = Math.max(12, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 12));
@@ -342,6 +398,7 @@ export default function ProjectDetailPage() {
     setStickerMenuPos(null);
     setStickerStartDate('');
     setStickerDeadline('');
+    setStickerAssigneeIds([]);
   }, []);
 
   const openTaskContextMenu = (e: React.MouseEvent<HTMLButtonElement>, taskId: string) => {
@@ -367,6 +424,7 @@ export default function ProjectDetailPage() {
     }
     setStickerStartDate(toDateTimeLocalValue(task.start_date));
     setStickerDeadline(toDateTimeLocalValue(task.deadline));
+    if (sub === 'assignee') setStickerAssigneeIds(getTaskAssigneeIds(task));
     setStickerMenuPos(getFloatingMenuPosition(e.currentTarget, 260, sub === 'assignee' ? 360 : sub === 'deadline' ? 300 : 240));
     setStickerMenuId(task.id);
     setStickerSub(sub);
@@ -403,14 +461,11 @@ export default function ProjectDetailPage() {
           </div>,
           document.body,
         )}
-        <button type="button" onClick={() => deleteTaskById(parentTask.id)}>
-          <Archive size={14} /> Поместить в архив
-        </button>
         <button type="button" onClick={() => copyTaskLink(parentTask.id)}>
           <Copy size={14} /> Копировать ссылку
         </button>
         <button type="button" onClick={() => { setTaskCoverTargetId(parentTask.id); closeTaskContextMenu(); setTimeout(() => taskCoverRef.current?.click(), 50); }}>
-          <ImagePlus size={14} /> Загрузить обложку...
+          <ImagePlus size={14} /> Прикрепить изображение...
         </button>
         <div className={styles.ygColMenuDivider} />
         <button type="button" className={styles.ygColMenuDanger} onClick={() => deleteTaskById(parentTask.id)}>
@@ -428,7 +483,13 @@ export default function ProjectDetailPage() {
         {!stickerSub && (
           <>
             <div className={styles.ygStickerMenuTitle}>Добавить стикер</div>
-            <button type="button" onClick={() => setStickerSub('assignee')}>
+            <button
+              type="button"
+              onClick={() => {
+                setStickerAssigneeIds(getTaskAssigneeIds(parentTask));
+                setStickerSub('assignee');
+              }}
+            >
               <UserRound size={14} /> Исполнитель
             </button>
             <button type="button" onClick={() => setStickerSub('deadline')}>
@@ -443,15 +504,35 @@ export default function ProjectDetailPage() {
           <>
             <div className={styles.ygStickerMenuTitle}>Исполнитель</div>
             {members.map(m => (
-              <button key={m.id} type="button" onClick={() => applyStickerAssignee(parentTask.id, m.id)}>
-                {m.name}
-              </button>
+              <label key={m.id} className={styles.ygStickerCheckboxRow}>
+                <input
+                  type="checkbox"
+                  checked={stickerAssigneeIds.some(x => sameUserId(x, m.id))}
+                  onChange={e => {
+                    setStickerAssigneeIds(prev =>
+                      e.target.checked
+                        ? [...prev.filter(x => !sameUserId(x, m.id)), m.id]
+                        : prev.filter(x => !sameUserId(x, m.id)),
+                    );
+                  }}
+                />
+                <span>{m.name}</span>
+              </label>
             ))}
-            {parentTask.assignee_id && (
-              <button type="button" className={styles.ygColMenuDanger} onClick={() => applyStickerAssignee(parentTask.id, '')}>
-                <X size={14} /> Убрать
+            <div className={styles.ygStickerActionsRow}>
+              <button
+                type="button"
+                className={styles.ygStickerApplyBtn}
+                onClick={() => applyStickerAssignees(parentTask.id, stickerAssigneeIds)}
+              >
+                Применить
               </button>
-            )}
+              {(stickerAssigneeIds.length > 0 || getTaskAssigneeIds(parentTask).length > 0) && (
+                <button type="button" className={styles.ygStickerRemoveBtn} onClick={() => applyStickerAssignees(parentTask.id, [])}>
+                  Убрать
+                </button>
+              )}
+            </div>
           </>
         )}
         {stickerSub === 'deadline' && (
@@ -478,14 +559,16 @@ export default function ProjectDetailPage() {
                 />
               </label>
             </div>
-            <button type="button" className={styles.ygStickerApplyBtn} onClick={() => applyStickerDeadline(parentTask.id, stickerStartDate, stickerDeadline)} disabled={!stickerStartDate && !stickerDeadline}>
-              Применить
-            </button>
-            {(parentTask.start_date || parentTask.deadline) && (
-              <button type="button" className={styles.ygColMenuDanger} onClick={() => applyStickerDeadline(parentTask.id, '', '')}>
-                <X size={14} /> Убрать
+            <div className={styles.ygStickerActionsRow}>
+              <button type="button" className={styles.ygStickerApplyBtn} onClick={() => applyStickerDeadline(parentTask.id, stickerStartDate, stickerDeadline)} disabled={!stickerStartDate && !stickerDeadline}>
+                Применить
               </button>
-            )}
+              {(parentTask.start_date || parentTask.deadline) && (
+                <button type="button" className={styles.ygStickerRemoveBtn} onClick={() => applyStickerDeadline(parentTask.id, '', '')}>
+                  Убрать
+                </button>
+              )}
+            </div>
           </>
         )}
         {stickerSub === 'priority' && (
@@ -506,15 +589,19 @@ export default function ProjectDetailPage() {
   const renderBoardTaskTree = (parentTask: Task, depth: number, indexInParent: number) => {
     const kids = tasks
       .filter(t => t.parent_id === parentTask.id)
+      .filter(t => subtreeMatchesFilter(t.id))
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
     const expanded = expandedBoardTasks[parentTask.id];
     const doneSub = kids.filter(k => k.is_completed).length;
     const totalSub = kids.length;
     const completed = !!parentTask.is_completed;
     const kidAssignees = kids.reduce<{ id: string; name: string }[]>((acc, k) => {
-      if (k.assignee_id && k.assignee_name && !acc.some(a => a.id === k.assignee_id)) acc.push({ id: k.assignee_id, name: k.assignee_name });
+      for (const entry of cardAssigneeEntries(k, members)) {
+        if (!acc.some(a => a.id === entry.id)) acc.push(entry);
+      }
       return acc;
     }, []);
+    const assigneesOnCard = cardAssigneeEntries(parentTask, members);
 
     const row = (
       <div
@@ -602,14 +689,20 @@ export default function ProjectDetailPage() {
             </button>
           </div>
           <div className={styles.ygTaskMetaSecondary}>
-            {parentTask.assignee_name ? (
+            {assigneesOnCard.length > 0 ? (
               <button
                 type="button"
-                className={`${styles.ygAssigneeChip} ${styles.ygMetaPillClickable}`}
-                title={parentTask.assignee_name}
+                className={`${styles.ygAssigneeStackBtn} ${styles.ygMetaPillClickable}`}
+                title={assigneesOnCard.map(a => a.name).join(', ')}
                 onClick={e => openStickerMenuForTask(e, parentTask, 'assignee')}
               >
-                {parentTask.assignee_name.slice(0, 2).toUpperCase()}
+                <div className={styles.ygAssigneeAvatarStack}>
+                  {assigneesOnCard.map(a => (
+                    <span key={a.id} className={styles.ygCardAvatar} style={{ background: avatarColor(a.name) }}>
+                      {a.name.slice(0, 2).toUpperCase()}
+                    </span>
+                  ))}
+                </div>
               </button>
             ) : (
               <button
@@ -700,7 +793,6 @@ export default function ProjectDetailPage() {
     setIterations([]);
     setSelectedTask(null);
     setChatMessages([]);
-    setWorkspaceTab('board');
     loadProject(); loadIterations(); loadMembers();
   }, [id]);
   useEffect(() => { loadIterations(); }, [showArchived]);
@@ -789,24 +881,40 @@ export default function ProjectDetailPage() {
     return () => { window.removeEventListener('click', handler); window.removeEventListener('scroll', handler, true); };
   }, [stickerMenuId, closeStickerMenu]);
 
-  const applyStickerAssignee = async (taskId: string, assigneeId: string) => {
-    try { await api.put(`/tasks/${taskId}`, { assignee_id: assigneeId || null }); } catch {}
-    closeStickerMenu();
-    if (selectedIteration) loadTasks(selectedIteration.id);
+  const applyStickerAssignees = async (taskId: string, assigneeIds: string[]) => {
+    const ordered = orderAssigneeIdsForApi(members, assigneeIds);
+    try {
+      await api.put(`/tasks/${taskId}`, { assignee_ids: ordered });
+      closeStickerMenu();
+      if (selectedIteration) await loadTasks(selectedIteration.id);
+      if (selectedTask?.id === taskId) await loadTaskDetail(taskId);
+    } catch {
+      window.dispatchEvent(new CustomEvent('api-error', { detail: 'Не удалось сохранить исполнителей. Проверьте сеть и права доступа.' }));
+    }
   };
   const applyStickerDeadline = async (taskId: string, startDate: string, deadline: string) => {
     if (startDate && deadline && new Date(startDate) > new Date(deadline)) {
-      window.alert('Начало периода не может быть позже конца');
+      window.dispatchEvent(new CustomEvent('api-error', { detail: 'Начало периода не может быть позже конца' }));
       return;
     }
-    try { await api.put(`/tasks/${taskId}`, { start_date: startDate || null, deadline: deadline || null }); } catch {}
-    closeStickerMenu();
-    if (selectedIteration) loadTasks(selectedIteration.id);
+    try {
+      await api.put(`/tasks/${taskId}`, { start_date: startDate || null, deadline: deadline || null });
+      closeStickerMenu();
+      if (selectedIteration) await loadTasks(selectedIteration.id);
+      if (selectedTask?.id === taskId) await loadTaskDetail(taskId);
+    } catch {
+      window.dispatchEvent(new CustomEvent('api-error', { detail: 'Не удалось сохранить даты. Проверьте сеть и права доступа.' }));
+    }
   };
   const applyStickerPriority = async (taskId: string, priority: string) => {
-    try { await api.put(`/tasks/${taskId}`, { priority }); } catch {}
-    closeStickerMenu();
-    if (selectedIteration) loadTasks(selectedIteration.id);
+    try {
+      await api.put(`/tasks/${taskId}`, { priority });
+      closeStickerMenu();
+      if (selectedIteration) await loadTasks(selectedIteration.id);
+      if (selectedTask?.id === taskId) await loadTaskDetail(taskId);
+    } catch {
+      window.dispatchEvent(new CustomEvent('api-error', { detail: 'Не удалось сохранить приоритет. Проверьте сеть и права доступа.' }));
+    }
   };
 
   const loadProject = async () => {
@@ -842,6 +950,19 @@ export default function ProjectDetailPage() {
   };
   const loadMembers = async () => { try { const { data } = await api.get('/users'); setMembers(data); setAllUsers(data); } catch {} };
   const loadProjectMembers = async () => { try { const { data } = await api.get(`/projects/${id}`); setProjectMembers(data.members || []); } catch {} };
+
+  const loadProjectRef = useRef(loadProject);
+  const loadIterationsRef = useRef(loadIterations);
+  const loadTasksRef = useRef(loadTasks);
+  const loadBoardColumnsRef = useRef(loadBoardColumns);
+  const loadProjectMembersRef = useRef(loadProjectMembers);
+  const selectedIterationRef = useRef(selectedIteration);
+  loadProjectRef.current = loadProject;
+  loadIterationsRef.current = loadIterations;
+  loadTasksRef.current = loadTasks;
+  loadBoardColumnsRef.current = loadBoardColumns;
+  loadProjectMembersRef.current = loadProjectMembers;
+  selectedIterationRef.current = selectedIteration;
 
   const saveProjectTitle = async () => {
     if (!project) return;
@@ -896,7 +1017,7 @@ export default function ProjectDetailPage() {
     e.preventDefault();
     if (!selectedIteration) return;
     if (taskForm.start_date && taskForm.deadline && new Date(taskForm.start_date) > new Date(taskForm.deadline)) {
-      window.alert('Начало периода не может быть позже конца');
+      window.dispatchEvent(new CustomEvent('api-error', { detail: 'Начало периода не может быть позже конца' }));
       return;
     }
     if (taskFormParentId) {
@@ -910,7 +1031,7 @@ export default function ProjectDetailPage() {
       });
     } else {
       if (!taskFormColumnId) {
-        window.alert(lang.projectDetail.taskNeedColumn);
+        window.dispatchEvent(new CustomEvent('api-error', { detail: lang.projectDetail.taskNeedColumn }));
         return;
       }
       await api.post('/tasks', {
@@ -963,7 +1084,7 @@ export default function ProjectDetailPage() {
     try {
       path = iterationBoardColumnsPath(selectedIteration.id);
     } catch {
-      window.alert(lang.projectDetail.boardListInvalidIteration);
+      window.dispatchEvent(new CustomEvent('api-error', { detail: lang.projectDetail.boardListInvalidIteration }));
       return;
     }
     try {
@@ -981,7 +1102,7 @@ export default function ProjectDetailPage() {
         typeof d === 'string' ? d : Array.isArray(d) ? d.map(x => String(x)).join('\n') : ax.message;
       const head =
         ax.response?.status === 404 ? lang.projectDetail.boardListNotFound : `${lang.common.error}: ${detail}`;
-      window.alert(`${head}\n\n${lang.projectDetail.boardListServerHint}`);
+      window.dispatchEvent(new CustomEvent('api-error', { detail: `${head}. ${lang.projectDetail.boardListServerHint}` }));
     }
   };
   const toggleTaskCompleted = async (task: Task, e?: React.MouseEvent) => {
@@ -1007,9 +1128,23 @@ export default function ProjectDetailPage() {
     setRenamingTaskTitle('');
     if (selectedIteration) loadTasks(selectedIteration.id);
   };
-  const copyTaskLink = (taskId: string) => {
-    const url = `${window.location.origin}${window.location.pathname}?task=${taskId}`;
-    navigator.clipboard.writeText(url);
+  const copyTaskLink = async (taskId: string) => {
+    const projectId = encodeURIComponent(String(id || ''));
+    const linkedTaskId = encodeURIComponent(taskId);
+    const url = `${window.location.origin}${window.location.pathname}#/project/${projectId}?task=${linkedTaskId}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      const fallback = document.createElement('textarea');
+      fallback.value = url;
+      fallback.setAttribute('readonly', '');
+      fallback.style.position = 'fixed';
+      fallback.style.opacity = '0';
+      document.body.appendChild(fallback);
+      fallback.select();
+      document.execCommand('copy');
+      fallback.remove();
+    }
     setTaskCtxMenuId(null);
   };
   const uploadTaskCover = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1024,6 +1159,53 @@ export default function ProjectDetailPage() {
     const { data } = await api.get(`/tasks/${tid}`);
     setSelectedTask(data);
   };
+  useEffect(() => {
+    const hashQuery = window.location.hash.split('?')[1] || '';
+    const linkedTaskId = new URLSearchParams(hashQuery).get('task');
+    if (!linkedTaskId || linkedTaskOpenedRef.current === linkedTaskId || !tasks.some(task => task.id === linkedTaskId)) return;
+    linkedTaskOpenedRef.current = linkedTaskId;
+    void loadTaskDetail(linkedTaskId);
+  }, [tasks]);
+  const submitTaskForKpiReview = async () => {
+    if (!selectedTask) return;
+    setKpiBusy(true);
+    setKpiFeedback(null);
+    try {
+      const { data } = await api.post(`/tasks/${selectedTask.id}/submit-for-review`);
+      setSelectedTask(data);
+      setKpiFeedback('Задача отправлена. Дата и попытка сохранены.');
+      if (selectedIteration) await loadTasks(selectedIteration.id);
+    } catch (e: any) {
+      setKpiFeedback(e?.response?.data?.detail || 'Не удалось отправить задачу на проверку');
+    } finally {
+      setKpiBusy(false);
+    }
+  };
+  const submitTaskKpiDecision = async () => {
+    if (!selectedTask) return;
+    setKpiBusy(true);
+    setKpiFeedback(null);
+    try {
+      const { data } = await api.post(`/tasks/${selectedTask.id}/kpi-review`, {
+        decision: kpiDecision,
+        comment: kpiComment || undefined,
+        has_excuse: kpiDecision === 'overdue' && kpiHasExcuse,
+        excuse_reason: kpiDecision === 'overdue' && kpiHasExcuse ? kpiExcuseReason : undefined,
+        return_reason: kpiDecision === 'rework' ? kpiReturnReason : undefined,
+      });
+      setSelectedTask(data);
+      setShowKpiReview(false);
+      setKpiComment('');
+      setKpiFeedback(data.is_discrepancy
+        ? 'Зафиксировано расхождение с объективной датой. KPI временно исключён из расчёта.'
+        : 'Решение сохранено, KPI пересчитан.');
+      if (selectedIteration) await loadTasks(selectedIteration.id);
+    } catch (e: any) {
+      setKpiFeedback(e?.response?.data?.detail || 'Не удалось сохранить решение KPI');
+    } finally {
+      setKpiBusy(false);
+    }
+  };
   const saveTaskDescription = async () => {
     if (!selectedTask) return;
     await api.put(`/tasks/${selectedTask.id}`, { description: descDraft || null });
@@ -1037,8 +1219,8 @@ export default function ProjectDetailPage() {
   // Chat
   const loadChatMessages = useCallback(async (iid: string) => { setChatLoading(true); try { const { data } = await api.get(`/chat/${iid}/messages?limit=100`); setChatMessages(data); } catch {} setChatLoading(false); }, []);
   const connectWs = useCallback((iid: string) => {
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${proto}://${location.host}/ws/chat/${iid}`);
+    const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws/chat/${iid}`;
+    const ws = new WebSocket(wsUrl);
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
       if (msg.type === 'message') {
@@ -1047,19 +1229,49 @@ export default function ProjectDetailPage() {
         setTypingUsers(prev => prev.includes(msg.user_name) ? prev : [...prev, msg.user_name]);
         setTimeout(() => setTypingUsers(prev => prev.filter(n => n !== msg.user_name)), 3000);
       } else if (msg.type === 'task_update') {
-        setTasks(prev =>
-          prev.map(t =>
-            t.id === msg.task_id
-              ? {
-                  ...t,
-                  status: msg.status ?? t.status,
-                  priority: msg.priority ?? t.priority,
-                  title: msg.title ?? t.title,
-                  is_completed: msg.is_completed !== undefined ? msg.is_completed : t.is_completed,
-                }
-              : t
-          )
-        );
+        if (msg.task) {
+          const patch = msg.task as Task;
+          setTasks(prev => {
+            const idx = prev.findIndex(t => t.id === msg.task_id);
+            if (idx === -1) return prev;
+            const next = [...prev];
+            next[idx] = { ...next[idx], ...patch };
+            return next;
+          });
+          setSelectedTask(prev => (prev && prev.id === msg.task_id ? { ...prev, ...patch } : prev));
+        } else {
+          setTasks(prev =>
+            prev.map(t =>
+              t.id === msg.task_id
+                ? {
+                    ...t,
+                    status: msg.status ?? t.status,
+                    priority: msg.priority ?? t.priority,
+                    title: msg.title ?? t.title,
+                    is_completed: msg.is_completed !== undefined ? msg.is_completed : t.is_completed,
+                  }
+                : t
+            )
+          );
+        }
+      } else if (msg.type === 'task_created') {
+        if (msg.task) {
+          const row = msg.task as Task;
+          setTasks(prev => (prev.some(t => t.id === row.id) ? prev : [...prev, row]));
+        }
+      } else if (msg.type === 'task_deleted') {
+        setTasks(prev => prev.filter(t => t.id !== msg.task_id));
+        setSelectedTask(prev => (prev?.id === msg.task_id ? null : prev));
+      } else if (msg.type === 'resource_changed') {
+        if (msg.resource === 'board_columns' && msg.iteration_id === iid) {
+          void loadBoardColumnsRef.current(iid);
+        } else if (msg.resource === 'tasks' && msg.iteration_id === iid) {
+          void loadTasksRef.current(iid);
+        } else if (msg.resource === 'iterations' && msg.iteration_id === iid) {
+          void loadIterationsRef.current();
+        }
+      } else if (msg.type === 'iteration_deleted') {
+        if (msg.iteration_id === iid) void loadIterationsRef.current();
       }
     };
     ws.onclose = () => { wsRef.current = null; };
@@ -1089,12 +1301,64 @@ export default function ProjectDetailPage() {
       wsRef.current?.close();
     };
   }, [selectedIteration, connectWs]);
+
+  useEffect(() => {
+    if (!id) return;
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent<unknown>).detail as {
+        type?: string;
+        resource?: string;
+        project_id?: string;
+      } | null;
+      if (!d || d.type !== 'resource_changed') return;
+      if (d.resource === 'project' && d.project_id === id) {
+        void loadProjectRef.current();
+        void loadIterationsRef.current();
+        void loadProjectMembersRef.current();
+      }
+      if (d.resource === 'application' && d.project_id === id) {
+        void loadIterationsRef.current();
+        const si = selectedIterationRef.current;
+        if (si) {
+          void loadTasksRef.current(si.id);
+          void loadBoardColumnsRef.current(si.id);
+        }
+      }
+    };
+    window.addEventListener('agile-realtime', handler);
+    return () => window.removeEventListener('agile-realtime', handler);
+  }, [id]);
+
   useEffect(() => {
     if (selectedIteration) loadChatMessages(selectedIteration.id);
   }, [selectedIteration, loadChatMessages]);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
 
-  const sendChatMessage = (e: React.FormEvent) => { e.preventDefault(); if (!chatInput.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return; const payload: any = { content: chatInput.trim() }; if (replyTo) { payload.reply_to_id = replyTo.id; } wsRef.current.send(JSON.stringify(payload)); setChatInput(''); setReplyTo(null); setShowMentions(false); };
+  const sendChatMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const text = chatInput.trim();
+    if (!text || !selectedIteration) return;
+    const payload: any = { content: text };
+    if (replyTo) {
+      payload.reply_to_id = replyTo.id;
+    }
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(payload));
+      setChatInput('');
+      setReplyTo(null);
+      setShowMentions(false);
+    } else {
+      try {
+        await api.post(`/chat/${selectedIteration.id}/messages`, payload);
+        setChatInput('');
+        setReplyTo(null);
+        setShowMentions(false);
+        void loadChatMessages(selectedIteration.id);
+      } catch (err) {
+        console.error("Failed to send chat message:", err);
+      }
+    }
+  };
   const sendTypingEvent = () => { if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) { wsRef.current.send(JSON.stringify({ type: 'typing' })); } };
   const editMessage = async (mid: string) => { if (!editMsgText.trim() || !selectedIteration) return; await api.put(`/chat/messages/${mid}`, { content: editMsgText }); setEditingMsg(null); setEditMsgText(''); loadChatMessages(selectedIteration.id); };
   const deleteMessage = async (mid: string) => { if (!selectedIteration) return; await api.delete(`/chat/messages/${mid}`); loadChatMessages(selectedIteration.id); };
@@ -1222,7 +1486,7 @@ export default function ProjectDetailPage() {
       if (key === 'deadline') {
         cmp = (a.deadline || '').localeCompare(b.deadline || '');
       } else if (key === 'assignee') {
-        cmp = (a.assignee_name || '').localeCompare(b.assignee_name || '');
+        cmp = assigneeSortKey(a).localeCompare(assigneeSortKey(b));
       } else if (key === 'created') {
         cmp = a.created_at.localeCompare(b.created_at);
       } else if (key === 'completed') {
@@ -1273,64 +1537,45 @@ export default function ProjectDetailPage() {
 
   if (!project) return <p>{lang.common.loading}</p>;
   const canEditMsg = (m: ChatMessage) => m.user_id === currentUser?.id && !m.is_deleted && (Date.now() - new Date(m.created_at).getTime()) < 86400000;
-  const canDeleteMsg = (m: ChatMessage) => !m.is_deleted && (m.user_id === currentUser?.id || currentUser?.role === 'admin');
+  const canDeleteMsg = (m: ChatMessage) => !m.is_deleted && (m.user_id === currentUser?.id || !!(currentUser && ['admin', 'owner', 'deputy_owner'].includes(currentUser.role)));
   const projectMemberRows = (project.members && project.members.length > 0 ? project.members : projectMembers) || [];
-  const projectHeaderMembers = projectMemberRows
-    .map((pm: any) => {
-      const known = allUsers.find(u => u.id === pm.user_id);
-      return {
-        id: pm.user_id,
-        name: known?.name || pm.user_name || 'U',
-        avatarUrl: known?.avatar_url || '',
-      };
-    })
-    .slice(0, 8);
   const visibleProjectMembers = projectMembers.filter((m: any) => {
     const person = allUsers.find(u => u.id === m.user_id);
     const text = `${m.user_name || ''} ${person?.name || ''} ${person?.email || ''}`.toLowerCase();
     return text.includes(memberSearch.trim().toLowerCase());
   });
-
-  const headerSlot = typeof document !== 'undefined' ? document.getElementById('header-project-slot') : null;
+  const activeProjectFilterCount = [filterAssignee, filterDeadline, filterPriority].filter(Boolean).length;
 
   return (
-    <div className={`${styles.workspaceRoot} page-enter`}>
+    <div className={`${styles.workspaceRoot} ${rightPanelOpen ? styles.workspaceChatOpen : ''} page-enter`}>
       <div className={styles.workspaceBg} aria-hidden />
-      {headerSlot && createPortal(
-        <div className={styles.workspaceHeaderPortal}>
-          <div className={styles.workspaceHeaderLead}>
-            <button type="button" className={styles.workspaceBack} onClick={() => navigate('/projects')} aria-label={lang.common.back}>
-              <ChevronLeft size={17} strokeWidth={2.6} />
-            </button>
-          </div>
-          <div className={styles.workspaceHeaderTools}>
-            <div className={styles.workspaceAvatars}>
-              {projectHeaderMembers.map(m => (
-                <span key={m.id} className={styles.workspaceAvatar} title={m.name}>
-                  {m.avatarUrl ? (
-                    <img src={m.avatarUrl} alt={m.name} className={styles.workspaceAvatarImg} />
-                  ) : (
-                    m.name.slice(0, 2).toUpperCase()
-                  )}
-                </span>
-              ))}
-            </div>
-            <button
-              type="button"
-              className={styles.workspaceIconBtn}
-              onClick={() => {
-                loadProjectMembers();
-                setShowMembersModal(true);
-              }}
-              aria-label={lang.projects.members}
-            >
-              <Users size={14} />
-            </button>
-          </div>
-        </div>,
-        headerSlot
-      )}
       <div className={styles.workspaceInner}>
+
+        <header className={styles.projectContextHeader}>
+          <div className={styles.projectIdentity}>
+            <button type="button" className={styles.workspaceBack} onClick={() => navigate('/projects')} aria-label={lang.common.back}>
+              <ChevronLeft size={19} strokeWidth={2.5} />
+            </button>
+            <div className={styles.projectIdentityText}>
+              <span className={styles.projectContextLabel}>{lang.workspace.board}</span>
+              <h1 className={styles.workspaceProjectTitle}>{project.name}</h1>
+              {selectedIteration && <span className={styles.projectIterationName}>{selectedIteration.name}</span>}
+            </div>
+          </div>
+          <button
+            type="button"
+            className={styles.projectMembersButton}
+            onClick={() => {
+              loadProjectMembers();
+              setShowMembersModal(true);
+            }}
+            aria-label={`${lang.projects.members}: ${projectMemberRows.length}`}
+          >
+            <Users size={17} aria-hidden />
+            <span>{lang.projects.members}</span>
+            <span className={styles.projectMembersCount}>{projectMemberRows.length}</span>
+          </button>
+        </header>
 
         <div className={styles.iterationsBarYougile} style={currentUser?.show_iterations ? {} : { display: 'none' }}>
           <button
@@ -1415,38 +1660,59 @@ export default function ProjectDetailPage() {
         {selectedIteration && (
           <>
             <div className={styles.unifiedToolbar}>
-              <div className={styles.viewPills}>
-                <button
-                  type="button"
-                  className={`${styles.viewPill} ${workspaceTab === 'board' ? styles.viewPillActive : ''}`}
-                  onClick={() => setWorkspaceTab('board')}
-                >
-                  <LayoutGrid size={15} />
-                  <span>{lang.workspace.board}</span>
-                </button>
-
-              </div>
-
               <button
                 type="button"
-                className="btn btn-primary btn-sm"
+                className={`btn btn-primary btn-sm ${styles.createListButton}`}
                 onClick={() => setShowColumnForm(true)}
               >
                 + {lang.projectDetail.createList}
               </button>
 
               <div className={styles.toolbarDivider} />
+
               <button
                 type="button"
-                className={`${styles.toolbarIconBtn} ${filterMyTasks ? styles.toolbarIconBtnActive : ''}`}
-                aria-label={lang.tasks.assignee}
-                onClick={() => setFilterMyTasks(f => !f)}
-                title={filterMyTasks ? lang.tasks.assignee : lang.tasks.assignee}
+                className={`${styles.mobileFilterToggle} ${mobileFiltersOpen || activeProjectFilterCount > 0 ? styles.mobileToolbarToggleActive : ''}`}
+                onClick={() => {
+                  setMobileSearchOpen(false);
+                  setMobileFiltersOpen(open => !open);
+                }}
+                aria-expanded={mobileFiltersOpen}
+                aria-label={MOBILE_FILTER_LABELS[language] || MOBILE_FILTER_LABELS.ru}
               >
-                <UserRound size={16} />
+                <Filter size={17} aria-hidden />
+                {activeProjectFilterCount > 0 && <span>{activeProjectFilterCount}</span>}
               </button>
 
-              <div className={styles.filterPills} ref={filterDropdownRef}>
+              <button
+                type="button"
+                className={`${styles.mobileSearchToggle} ${mobileSearchOpen || workspaceSearch ? styles.mobileToolbarToggleActive : ''}`}
+                onClick={() => {
+                  setMobileFiltersOpen(false);
+                  const next = !mobileSearchOpen;
+                  setMobileSearchOpen(next);
+                  if (next) requestAnimationFrame(() => workspaceSearchRef.current?.focus());
+                }}
+                aria-expanded={mobileSearchOpen}
+                aria-label={lang.workspace.searchPlaceholder}
+              >
+                <Search size={18} aria-hidden />
+              </button>
+
+              <div className={`${styles.workspaceSearchWrap} ${mobileSearchOpen ? styles.workspaceSearchWrapMobileOpen : ''}`} title={lang.workspace.searchPlaceholder}>
+                <Search size={14} className={styles.workspaceSearchIcon} aria-hidden />
+                <input
+                  ref={workspaceSearchRef}
+                  className={styles.workspaceSearchInput}
+                  type="search"
+                  placeholder={lang.workspace.searchPlaceholder}
+                  value={workspaceSearch}
+                  onChange={e => setWorkspaceSearch(e.target.value)}
+                  aria-label={lang.workspace.searchPlaceholder}
+                />
+              </div>
+
+              <div className={`${styles.filterPills} ${mobileFiltersOpen ? styles.filterPillsMobileOpen : ''}`} ref={filterDropdownRef}>
                 <div className={`${styles.filterPill} ${filterAssignee ? styles.filterPillActive : ''}`} onClick={() => setOpenFilterDropdown(openFilterDropdown === 'assignee' ? null : 'assignee')}>
                   <UserRound size={13} />
                   <span>{filterAssignee ? members.find(m => m.id === filterAssignee)?.name || lang.tasks.assignee : lang.tasks.assignee}</span>
@@ -1757,11 +2023,10 @@ export default function ProjectDetailPage() {
                   );
                 })()}
 
-
               </div>
 
               {rightPanelOpen && workspaceTab === 'board' && (
-                <aside className={styles.rightChatPanel} style={{ width: chatPanelWidth, maxWidth: '50vw' }}>
+                <aside className={styles.rightChatPanel} style={{ width: chatPanelWidth, maxWidth: '50vw' }} aria-label={lang.workspace.chatsTitle}>
                   <button
                     type="button"
                     className={styles.chatEdgeToggle}
@@ -2007,7 +2272,11 @@ export default function ProjectDetailPage() {
               <button
                 type="button"
                 className={styles.chatExpandStrip}
-                onClick={() => setRightPanelOpen(true)}
+                onClick={() => {
+                  setMobileFiltersOpen(false);
+                  setMobileSearchOpen(false);
+                  setRightPanelOpen(true);
+                }}
                 aria-label={lang.workspace.showChat}
                 title={lang.workspace.showChat}
               >
@@ -2017,6 +2286,8 @@ export default function ProjectDetailPage() {
           </>
         )}
       </div>
+
+      <input ref={taskCoverRef} type="file" hidden accept="image/*" onChange={uploadTaskCover} />
 
       {/* MODALS */}
       {selectedTask && (
@@ -2032,20 +2303,6 @@ export default function ProjectDetailPage() {
                   <h2 className={styles.taskSlideTitle}>{selectedTask.title}</h2>
                   <span className={styles.taskSlideId}>#{String(selectedTask.id).slice(0, 8)}</span>
                 </div>
-              </div>
-              <div className={styles.taskSlideActions}>
-                <button type="button" className={styles.taskSlideIconBtn} aria-label={lang.workspace.searchPlaceholder}>
-                  <Search size={18} />
-                </button>
-                <button type="button" className={styles.taskSlideIconBtn} aria-label={lang.common.files}>
-                  <Paperclip size={18} />
-                </button>
-                <button type="button" className={styles.taskSlideIconBtn} aria-label="Star">
-                  <Star size={18} />
-                </button>
-                <button type="button" className={styles.taskSlideIconBtn} aria-label="Notify">
-                  <Bell size={18} />
-                </button>
               </div>
             </div>
             <div className={styles.taskSlideTabs}>
@@ -2088,7 +2345,8 @@ export default function ProjectDetailPage() {
                   <h4>{lang.workspace.taskInfoTitle}</h4>
                   <p>
                     <UserRound size={14} style={{ marginRight: 6 }} />
-                    {lang.tasks.assignee}: {selectedTask.assignee_name || '—'}
+                    {lang.tasks.assignee}:{' '}
+                    {assigneeSortKey(selectedTask).trim() || '—'}
                   </p>
                   <p>
                     <CalendarDays size={14} style={{ marginRight: 6 }} />
@@ -2098,6 +2356,91 @@ export default function ProjectDetailPage() {
                     <span className={`badge ${selectedTask.status === TASK_STATUSES[2] ? 'badge-success' : 'badge-primary'}`}>{selectedTask.status}</span>
                     <span className={`badge ${selectedTask.priority === 'Высокий' ? 'badge-error' : 'badge-warning'}`}>{priorityLabel(selectedTask.priority)}</span>
                   </p>
+                  <div style={{ marginTop: 16, padding: 14, border: '1px solid var(--color-border)', borderRadius: 12, background: 'var(--color-surface)' }}>
+                    <h4 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <BarChart3 size={16} /> KPI задачи
+                    </h4>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                      <span className={`badge ${selectedTask.kpi_status === 'in_time' ? 'badge-success' : selectedTask.kpi_status === 'overdue' || selectedTask.is_discrepancy ? 'badge-error' : 'badge-warning'}`}>
+                        {selectedTask.kpi_status === 'pending_review' && 'На проверке'}
+                        {selectedTask.kpi_status === 'in_time' && 'Сдано в срок'}
+                        {selectedTask.kpi_status === 'overdue' && 'Просрочено'}
+                        {selectedTask.kpi_status === 'rework' && 'На доработке'}
+                        {!selectedTask.kpi_status && 'Не отправлялась'}
+                      </span>
+                      {(selectedTask.return_count || 0) > 0 && <span className="badge badge-warning">Возвратов: {selectedTask.return_count}</span>}
+                      {selectedTask.systematic_defect && <span className="badge badge-error">Систематический брак</span>}
+                      {selectedTask.is_bonus_eligible && <span className="badge badge-success">Бонус +2% KPI9</span>}
+                      {selectedTask.is_discrepancy && <span className="badge badge-error">Расхождение с дедлайном</span>}
+                    </div>
+                    {selectedTask.last_submitted_at && (
+                      <small style={{ display: 'block', marginBottom: 10 }}>
+                        Последняя отправка: {new Date(selectedTask.last_submitted_at).toLocaleString()}
+                      </small>
+                    )}
+
+                    {currentUser && getTaskAssigneeIds(selectedTask).some(uid => sameUserId(uid, currentUser.id)) && selectedTask.kpi_status !== 'pending_review' && (
+                      <button type="button" className="btn btn-primary btn-sm" disabled={kpiBusy} onClick={submitTaskForKpiReview}>
+                        <Send size={14} /> Отправить на проверку
+                      </button>
+                    )}
+
+                    {currentUser && (
+                      ['admin', 'owner', 'deputy_owner'].includes(currentUser.role) || sameUserId(selectedTask.creator_id, currentUser.id)
+                    ) && (
+                      <div style={{ marginTop: 10 }}>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowKpiReview(value => !value)}>
+                          <BarChart3 size={14} /> Пометить KPI
+                        </button>
+                        {showKpiReview && (
+                          <div className={styles.form} style={{ marginTop: 12 }}>
+                            <label>Решение руководителя</label>
+                            <select value={kpiDecision} onChange={e => setKpiDecision(e.target.value as typeof kpiDecision)}>
+                              <option value="in_time">Сдано в срок</option>
+                              <option value="overdue">Просрочено</option>
+                              <option value="rework">Вернуть на доработку</option>
+                            </select>
+                            {kpiDecision === 'overdue' && (
+                              <>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <input type="checkbox" checked={kpiHasExcuse} onChange={e => setKpiHasExcuse(e.target.checked)} />
+                                  Есть уважительная причина
+                                </label>
+                                {kpiHasExcuse && (
+                                  <select value={kpiExcuseReason} onChange={e => setKpiExcuseReason(e.target.value)} required>
+                                    <option value="">Выберите причину</option>
+                                    <option value="Болезнь">Болезнь</option>
+                                    <option value="Согласованный перенос дедлайна">Согласованный перенос дедлайна</option>
+                                    <option value="Недоступность внешней системы">Недоступность внешней системы</option>
+                                    <option value="Форс-мажор">Форс-мажор</option>
+                                  </select>
+                                )}
+                              </>
+                            )}
+                            {kpiDecision === 'rework' && (
+                              <>
+                                <label>Причина возврата</label>
+                                <select value={kpiReturnReason} onChange={e => setKpiReturnReason(e.target.value)}>
+                                  <option value="requirements">Не соответствует ТЗ</option>
+                                  <option value="logic">Логические ошибки</option>
+                                  <option value="broken_code">Код не работает</option>
+                                  <option value="report_error">Ошибка в отчёте</option>
+                                  <option value="incomplete">Неполнота данных</option>
+                                  <option value="external">Внешняя причина (не вина сотрудника)</option>
+                                </select>
+                              </>
+                            )}
+                            <label>Комментарий руководителя {kpiDecision === 'rework' ? '(обязательно)' : ''}</label>
+                            <textarea rows={3} value={kpiComment} onChange={e => setKpiComment(e.target.value)} />
+                            <button type="button" className="btn btn-primary btn-sm" disabled={kpiBusy} onClick={submitTaskKpiDecision}>
+                              {kpiBusy ? <Loader2 size={14} className="spin" /> : <Check size={14} />} Сохранить решение
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {kpiFeedback && <p style={{ margin: '10px 0 0', fontSize: 12.5 }}>{kpiFeedback}</p>}
+                  </div>
                   <h4>{lang.common.files}</h4>
                   {selectedTask.attachments?.map(a => (
                     <a key={a.id} href={a.file_url} target="_blank" rel="noopener noreferrer" className={styles.chatFile} style={{ display: 'block', margin: '4px 0' }}>
@@ -2106,7 +2449,6 @@ export default function ProjectDetailPage() {
                     </a>
                   ))}
                   <input ref={taskFileRef} type="file" hidden onChange={uploadTaskFile} />
-                  <input ref={taskCoverRef} type="file" hidden accept="image/*" onChange={uploadTaskCover} />
                   <button type="button" className="btn btn-secondary btn-sm" onClick={() => taskFileRef.current?.click()}>
                     {lang.common.uploadFile}
                   </button>

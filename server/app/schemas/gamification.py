@@ -153,6 +153,27 @@ class UserKPIOut(BaseModel):
     completion_pct: float = 0.0
     speed_topics_per_day: float = 0.0  # Скорость прохождения
     retention_pct: float = 0.0  # Усвоение материала (avg тест %)
+    
+    # Employee 17-point KPI system fields
+    kpi1_deadlines: Optional[float] = None
+    kpi2_punctuality: Optional[float] = None
+    kpi3_initiative: Optional[float] = None
+    kpi4_overtime: Optional[float] = None
+    kpi5_quality: Optional[float] = None
+    kpi8_attentiveness: Optional[float] = None
+    kpi9_bonus: Optional[float] = None
+    kpi9_carryover: float = 0.0
+    kpi10_responsibility: Optional[float] = None
+    kpi_customer_satisfaction: Optional[float] = None
+    
+    # Manager-specific KPI fields
+    manager_kpi1_reaction_index: Optional[float] = None
+    manager_kpi2_reaction_days: Optional[float] = None
+    manager_kpi3_responsibility: Optional[float] = None
+    manager_kpi4_attentiveness: Optional[float] = None
+    manager_kpi5_idea_reaction: Optional[float] = None
+    manager_kpi6_overtime: Optional[float] = None
+    manager_kpi7_department_control: Optional[float] = None
 
 
 class SessionPing(BaseModel):
@@ -191,3 +212,81 @@ class SectionAccessGrant(BaseModel):
 class UserSectionAccessOut(BaseModel):
     user_id: uuid.UUID
     section_keys: list[str] = Field(default_factory=list)
+
+
+# --- KPI Drops & Performance Reviews ---
+class KPIDropOut(BaseModel):
+    id: uuid.UUID
+    employee_id: uuid.UUID
+    employee_name: Optional[str] = None
+    kpi_type: str
+    drop_value: float
+    drop_date: datetime
+    resolved: bool
+    notification_sent: bool
+    class Config:
+        from_attributes = True
+
+
+class PerformanceReviewCreate(BaseModel):
+    drop_id: Optional[uuid.UUID] = None
+    kpi_type: str
+    reason: str
+    action: str
+    comment: Optional[str] = None
+
+
+class PerformanceReviewOut(BaseModel):
+    id: uuid.UUID
+    drop_id: Optional[uuid.UUID] = None
+    manager_id: uuid.UUID
+    manager_name: Optional[str] = None
+    review_date: datetime
+    kpi_type: str
+    reason: str
+    action: str
+    comment: Optional[str] = None
+    reaction_days: Optional[float] = None
+    is_overtime: bool
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+
+class ManagerKPIDetailsOut(BaseModel):
+    manager_id: uuid.UUID
+    current_kpi2: Optional[float] = None
+    reviews_count: int = 0
+    total_days: float = 0.0
+    overtime_reviews_count: int = 0
+    total_overtime_percent: int = 0
+    active_drops: list[KPIDropOut] = Field(default_factory=list)
+    recent_reviews: list[PerformanceReviewOut] = Field(default_factory=list)
+
+
+# --- Admin Dashboard ---
+class DepartmentKPIHealthOut(BaseModel):
+    department_id: Optional[str] = None
+    employee_count: int = 0
+    avg_kpi1_deadlines: Optional[float] = None
+    avg_kpi2_punctuality: Optional[float] = None
+    avg_kpi3_initiative: Optional[float] = None
+    avg_kpi4_overtime: Optional[float] = None
+    avg_kpi5_quality: Optional[float] = None
+    avg_kpi8_attentiveness: Optional[float] = None
+    avg_kpi9_bonus: Optional[float] = None
+    avg_kpi10_responsibility: Optional[float] = None
+
+
+class ManagerReactivityOut(BaseModel):
+    manager_id: uuid.UUID
+    manager_name: str
+    active_drops_count: int = 0
+    conducted_reviews_count: int = 0
+    avg_reaction_days: Optional[float] = None
+    manager_kpi1_reaction_index: Optional[float] = None
+    manager_kpi3_responsibility: Optional[float] = None
+    manager_kpi4_attentiveness: Optional[float] = None
+    manager_kpi5_idea_reaction: Optional[float] = None
+    manager_kpi6_overtime: Optional[float] = None
+    manager_kpi7_department_control: Optional[float] = None

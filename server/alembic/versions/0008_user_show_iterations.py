@@ -7,6 +7,7 @@ Create Date: 2026-03-28
 from __future__ import annotations
 
 from alembic import op
+# pyrefly: ignore [missing-import]
 import sqlalchemy as sa
 
 revision = "0008_show_iterations"
@@ -16,11 +17,16 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute(
-        sa.text(
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS show_iterations BOOLEAN NOT NULL DEFAULT false"
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute(
+            sa.text(
+                """
+                ALTER TABLE users
+                ADD COLUMN IF NOT EXISTS show_iterations BOOLEAN NOT NULL DEFAULT false
+                """
+            )
         )
-    )
 
 
 def downgrade() -> None:

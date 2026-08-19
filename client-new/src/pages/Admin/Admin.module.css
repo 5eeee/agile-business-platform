@@ -1,8 +1,8 @@
-.page { padding: 0; }
+.page { width: 100%; padding: 0 0 32px; }
 .page h1 {
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-size: clamp(24px, 3vw, 31px);
+  font-weight: 760;
+  letter-spacing: -0.035em;
   margin-bottom: 24px;
 }
 
@@ -15,26 +15,55 @@
 @media (max-width: 768px) {
   .statsRow { grid-template-columns: repeat(2, 1fr); }
 }
-.statsRow .card {
+.statCard {
+  position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 14px;
+  min-height: 118px;
   padding: 18px;
-  text-align: center;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: var(--color-surface);
+  box-shadow: 0 9px 26px var(--color-shadow);
 }
-.statsRow .card strong {
+.statCard::after {
+  content: '';
+  position: absolute;
+  right: -20px;
+  bottom: -34px;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: .045;
+}
+.statCard > div { display: grid; min-width: 0; }
+.statIcon { display: grid; place-items: center; flex: 0 0 44px; width: 44px; height: 44px; border-radius: 14px; background: currentColor; }
+.statIcon > svg { color: #fff; }
+.statUsers { color: #6366f1; }
+.statActive { color: #10b981; }
+.statPending { color: #f59e0b; }
+.statProjects { color: var(--color-primary); }
+.statCard strong {
   font-size: 26px;
-  font-weight: 700;
-  color: var(--color-primary);
+  font-weight: 780;
+  color: var(--color-text);
   letter-spacing: -0.02em;
+  line-height: 1;
 }
-.statsRow .card span {
-  font-size: 11px;
+.statCard div > span {
+  margin-top: 6px;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+.statCard small {
+  margin-top: 3px;
   color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 500;
+  font-size: 10px;
+  line-height: 1.35;
 }
 
 .tabs {
@@ -66,8 +95,16 @@
 }
 
 .tableWrap {
+  padding: 14px;
   overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: var(--color-surface);
+  box-shadow: 0 10px 28px var(--color-shadow);
 }
+.adminSearch { display: flex; align-items: center; gap: 9px; min-height: 44px; margin-bottom: 12px; padding: 0 13px; border: 1px solid var(--color-border); border-radius: 12px; color: var(--color-text-muted); background: var(--color-bg-secondary); }
+.adminSearch:focus-within { border-color: var(--color-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 10%, transparent); }
+.adminSearch input { width: 100%; padding: 0; border: 0; outline: 0; color: var(--color-text); background: transparent; font: inherit; }
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -166,26 +203,45 @@
 }
 
 .toolsGrid {
-  margin-top: 18px;
+  margin-top: 22px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 16px;
 }
 
 .toolCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 370px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 12px;
+  border-radius: 18px;
+  padding: 20px;
   background: var(--color-surface);
+  box-shadow: 0 10px 30px var(--color-shadow);
 }
-
+.coinToolCard { border-color: color-mix(in srgb, var(--color-primary) 25%, var(--color-border)); background: linear-gradient(150deg, color-mix(in srgb, var(--color-primary) 4%, var(--color-surface)), var(--color-surface) 40%); }
+.toolCardHeader { display: flex; align-items: flex-start; gap: 12px; min-height: 72px; margin-bottom: 16px; padding-bottom: 15px; border-bottom: 1px solid var(--color-border-light); }
+.toolCardIcon { display: grid; place-items: center; flex: 0 0 42px; width: 42px; height: 42px; border-radius: 13px; color: var(--color-primary); background: var(--color-primary-light); }
 .toolCard h3 {
-  margin: 0 0 10px;
-  font-size: 14px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: -.015em;
 }
+.toolCardHeader p { margin-top: 4px; color: var(--color-text-muted); font-size: 11px; line-height: 1.4; }
+.toolCard > .form { flex: 1; }
+.toolForm label { display: grid; gap: 6px; }
+.toolForm label > span { color: var(--color-text-secondary); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.toolForm select,
+.toolForm input,
+.toolForm textarea { width: 100%; min-height: 44px; border-radius: 11px; background: var(--color-bg-secondary); }
+.toolForm textarea { min-height: 86px; resize: vertical; }
+.toolForm > button { width: 100%; min-height: 44px; margin-top: auto; }
+.coinAmount { display: flex; align-items: center; gap: 8px; padding-left: 12px; border: 1px solid var(--color-border); border-radius: 11px; color: #f59e0b; background: var(--color-bg-secondary); }
+.coinAmount:focus-within { border-color: var(--color-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 10%, transparent); }
+.coinAmount input { min-width: 0; padding-left: 0; border: 0; outline: 0; box-shadow: none; background: transparent; }
 
 .leaderboardMini {
   display: flex;
@@ -201,6 +257,20 @@
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-sm);
   font-size: 13px;
+}
+
+@media (max-width: 1100px) {
+  .toolsGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 700px) {
+  .toolsGrid { grid-template-columns: 1fr; }
+  .toolCard { min-height: 0; padding: 17px; }
+  .statsRow { grid-template-columns: 1fr; }
+  .statCard { min-height: 100px; }
+  .pendingCard { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .pendingActions { width: 100%; }
+  .pendingActions > button { flex: 1; }
 }
 
 .checkboxGrid {

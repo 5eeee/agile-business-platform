@@ -12,7 +12,7 @@ _sync_engine = None
 def _get_engine():
     global _sync_engine
     if _sync_engine is None:
-        sync_url = settings.DATABASE_URL.replace("+asyncpg", "")
+        sync_url = settings.DATABASE_URL.replace("+asyncpg", "").replace("+aiosqlite", "")
         _sync_engine = create_engine(sync_url, pool_pre_ping=True)
     return _sync_engine
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from alembic import op
+# pyrefly: ignore [missing-import]
 import sqlalchemy as sa
 
 revision = "0003_col_color"
@@ -10,11 +11,16 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute(
-        sa.text(
-            "ALTER TABLE iteration_board_columns ADD COLUMN IF NOT EXISTS color VARCHAR(30)"
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.execute(
+            sa.text(
+                """
+                ALTER TABLE iteration_board_columns
+                ADD COLUMN IF NOT EXISTS color VARCHAR(30)
+                """
+            )
         )
-    )
 
 
 def downgrade() -> None:

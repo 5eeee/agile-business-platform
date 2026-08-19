@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app.database import get_db
 from app.models.document import Document, DocumentVersion
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, ADMIN_ROLES
 from app.models.project import ProjectMember
 from app.middleware.auth import get_current_user
 from app.services.s3 import upload_file_to_s3
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/documents", tags=["Документы"])
 
 async def _check_doc_membership(doc: Document, user: User, db: AsyncSession):
     """Verify user has project access via document's iteration"""
-    if user.role == UserRole.ADMIN:
+    if user.role in ADMIN_ROLES:
         return
     iter_result = await db.execute(select(Iteration).where(Iteration.id == doc.iteration_id))
     iteration = iter_result.scalar_one_or_none()
@@ -90,7 +90,7 @@ async def upload_document(
         raise HTTPException(status_code=400, detail="iteration_id обязателен")
 
     # Verify project membership
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         from app.models.iteration import Iteration
         iter_result = await db.execute(select(Iteration).where(Iteration.id == uuid.UUID(iteration_id)))
         iteration = iter_result.scalar_one_or_none()
@@ -208,7 +208,7 @@ async def delete_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Документ не найден")
     await _check_doc_membership(doc, user, db)
-    if doc.uploader_id != user.id and user.role != UserRole.ADMIN:
+    if doc.uploader_id != user.id and user.role not in ADMIN_ROLES:
         raise HTTPException(status_code=403, detail="Нет доступа")
     await db.delete(doc)
     await db.commit()

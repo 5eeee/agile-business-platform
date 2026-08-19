@@ -1,20 +1,21 @@
 # API администрирования
 import uuid
 import secrets
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models.user import User, UserRole, UserStatus, UserSphereRole
+from app.models.user import User, UserRole, UserStatus, UserSphereRole, ADMIN_ROLES
 from app.models.project import Project
 from app.schemas.user import (
     UserAdminOut, AdminUserUpdate, UserSphereRoleCreate, UserFireRequest
 )
 from app.middleware.auth import require_admin
 from app.api.auth import hash_password
-from app.config import SPHERES, SPHERE_ROLE_TEMPLATES
+from app.config import SPHERES, SPHERE_ROLE_TEMPLATES, normalize_sphere_name
 from app.services.telegram import notify_admin, notify_user_approved, notify_user_rejected, notify_user_fired
 from app.services.email import send_decision_email
 
@@ -80,6 +81,44 @@ async def reject_user(user_id: uuid.UUID, db: AsyncSession = Depends(get_db), ad
     return {"message": f"Пользователь {user.name} отклонён"}
 
 
+# Роли в сферах — объявлять до PUT/DELETE /users/{user_id}, чтобы путь .../sphere-roles не пересекался с менее специфичными правилами.
+@router.api_route("/users/{user_id}/sphere-roles", methods=["POST", "PUT"])
+async def assign_sphere_role(user_id: uuid.UUID, data: UserSphereRoleCreate, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)):
+    """Назначить роль пользователю внутри сферы"""
+    sphere = normalize_sphere_name(data.sphere)
+    role_title = data.role_title.strip()
+    target_user_id = user_id
+
+    if not role_title:
+        raise HTTPException(status_code=400, detail="Укажите название роли")
+    if len(role_title) > 100:
+        raise HTTPException(status_code=400, detail="Название роли не длиннее 100 символов")
+
+    if sphere not in SPHERES:
+        raise HTTPException(status_code=400, detail="Неизвестная сфера")
+
+    # Удалить старую роль в этой сфере, если есть
+    result = await db.execute(
+        select(UserSphereRole).where(
+            UserSphereRole.user_id == target_user_id,
+            UserSphereRole.sphere == sphere
+        )
+    )
+    existing = result.scalar_one_or_none()
+    if existing:
+        existing.role_title = role_title
+    else:
+        role = UserSphereRole(
+            user_id=target_user_id,
+            sphere=sphere,
+            role_title=role_title,
+        )
+        db.add(role)
+
+    await db.commit()
+    return {"message": "Роль назначена"}
+
+
 @router.put("/users/{user_id}")
 async def update_user(user_id: uuid.UUID, data: AdminUserUpdate, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)):
     """Редактирование пользователя (админ)"""
@@ -113,7 +152,7 @@ async def delete_user(user_id: uuid.UUID, db: AsyncSession = Depends(get_db), ad
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
-    if user.role == UserRole.ADMIN:
+    if user.role in ADMIN_ROLES:
         raise HTTPException(status_code=403, detail="Нельзя удалить администратора")
     
     user.status = UserStatus.BLOCKED
@@ -128,7 +167,7 @@ async def fire_user(user_id: uuid.UUID, data: UserFireRequest, db: AsyncSession 
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
-    if user.role == UserRole.ADMIN:
+    if user.role in ADMIN_ROLES:
         raise HTTPException(status_code=403, detail="Нельзя уволить администратора")
     
     user.status = UserStatus.FIRED
@@ -167,44 +206,10 @@ async def reset_password(user_id: uuid.UUID, db: AsyncSession = Depends(get_db),
     return {"message": "Пароль сброшен. Новый пароль отправлен пользователю."}
 
 
-# --- Роли в сферах ---
-
 @router.get("/spheres")
 async def get_spheres():
     """Список всех сфер и шаблонов ролей"""
     return {"spheres": SPHERES, "role_templates": SPHERE_ROLE_TEMPLATES}
-
-
-@router.post("/users/{user_id}/sphere-roles")
-async def assign_sphere_role(user_id: uuid.UUID, data: UserSphereRoleCreate, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)):
-    """Назначить роль пользователю внутри сферы"""
-    sphere = data.sphere if hasattr(data, 'sphere') else None
-    role_title = data.role_title if hasattr(data, 'role_title') else None
-    target_user_id = user_id  # user_id from path takes priority
-    
-    if sphere not in SPHERES:
-        raise HTTPException(status_code=400, detail="Неизвестная сфера")
-    
-    # Удалить старую роль в этой сфере, если есть
-    result = await db.execute(
-        select(UserSphereRole).where(
-            UserSphereRole.user_id == target_user_id,
-            UserSphereRole.sphere == sphere
-        )
-    )
-    existing = result.scalar_one_or_none()
-    if existing:
-        existing.role_title = role_title
-    else:
-        role = UserSphereRole(
-            user_id=target_user_id,
-            sphere=sphere,
-            role_title=role_title,
-        )
-        db.add(role)
-    
-    await db.commit()
-    return {"message": "Роль назначена"}
 
 
 @router.delete("/sphere-roles/{role_id}")
@@ -234,16 +239,18 @@ async def admin_stats(db: AsyncSession = Depends(get_db), admin: User = Depends(
     except Exception:
         pass
 
-    total_users = await db.execute(select(func.count(User.id)))
-    active_users = await db.execute(select(func.count(User.id)).where(User.status == UserStatus.ACTIVE))
-    pending_users = await db.execute(select(func.count(User.id)).where(User.status == UserStatus.PENDING))
-    total_projects = await db.execute(select(func.count(Project.id)).where(Project.is_deleted == False))
+    res_total, res_active, res_pending, res_projects = await asyncio.gather(
+        db.execute(select(func.count(User.id))),
+        db.execute(select(func.count(User.id)).where(User.status == UserStatus.ACTIVE)),
+        db.execute(select(func.count(User.id)).where(User.status == UserStatus.PENDING)),
+        db.execute(select(func.count(Project.id)).where(Project.is_deleted == False))
+    )
     
     result = {
-        "total_users": total_users.scalar(),
-        "active_users": active_users.scalar(),
-        "pending_users": pending_users.scalar(),
-        "total_projects": total_projects.scalar(),
+        "total_users": res_total.scalar(),
+        "active_users": res_active.scalar(),
+        "pending_users": res_pending.scalar(),
+        "total_projects": res_projects.scalar(),
     }
 
     try:

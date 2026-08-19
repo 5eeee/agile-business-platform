@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import api from '../../api/client';
+import api, { resetAuthRedirectGate } from '../../api/client';
 import type { User } from '../../types';
 
 /** Единый разбор ошибок API для входа/регистрации (422, CSRF, сеть, 429). */
@@ -50,6 +50,7 @@ const initialState: AuthState = {
 
 export const fetchMe = createAsyncThunk('auth/fetchMe', async () => {
   const { data } = await api.get('/auth/me');
+  resetAuthRedirectGate();
   return data;
 });
 
@@ -70,6 +71,7 @@ export const login = createAsyncThunk(
       }
 
       const me = await api.get('/auth/me');
+      resetAuthRedirectGate();
       return me.data;
     } catch (err: unknown) {
       return rejectWithValue(formatAuthRequestError(err, 'Ошибка входа'));
@@ -81,7 +83,7 @@ export const register = createAsyncThunk(
   'auth/register',
   async (data: { name: string; email: string; password: string }, { rejectWithValue }) => {
     try {
-      const res = await api.post('/auth/register', data);
+      const res = await api.post('/auth/register', data, { _skipAuthRefresh: true } as any);
       return res.data;
     } catch (err: unknown) {
       return rejectWithValue(formatAuthRequestError(err, 'Ошибка регистрации'));
@@ -93,8 +95,13 @@ export const verify2FA = createAsyncThunk(
   'auth/verify2FA',
   async (payload: { tempToken: string; code: string }, { rejectWithValue }) => {
     try {
-      await api.post('/auth/2fa/verify', { temp_token: payload.tempToken, code: payload.code });
+      await api.post(
+        '/auth/2fa/verify',
+        { temp_token: payload.tempToken, code: payload.code },
+        { _skipAuthRefresh: true } as any
+      );
       const me = await api.get('/auth/me');
+      resetAuthRedirectGate();
       return me.data;
     } catch (err: unknown) {
       return rejectWithValue(formatAuthRequestError(err, 'Неверный код 2FA'));

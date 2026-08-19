@@ -8,6 +8,8 @@ import { CardSkeleton } from '../../components/Skeleton/Skeleton';
 import type { Event, Notification as NotifType } from '../../types';
 import styles from './Home.module.css';
 
+import OwnerDashboard from '../OwnerDashboard/OwnerDashboardLive';
+
 interface DashboardData {
   completed_week: number;
   active_tasks: number;
@@ -22,6 +24,10 @@ export default function HomePage() {
   const { user } = useAppSelector(s => s.auth);
   const { language } = useAppSelector(s => s.ui);
   const lang = t(language);
+
+  if (user?.role === 'owner') {
+    return <OwnerDashboard />;
+  }
 
   const [events, setEvents] = useState<Event[]>([]);
   const [recentNotifs, setRecentNotifs] = useState<NotifType[]>([]);
@@ -123,13 +129,10 @@ export default function HomePage() {
             <button className="btn btn-secondary" onClick={() => navigate('/events')}>
               {lang.dashboard.viewEvents}
             </button>
-            <button className="btn btn-secondary" onClick={() => navigate('/music')}>
-              {lang.nav.music}
-            </button>
           </div>
         </div>
 
-        {/* Советы */}
+        {/* Советы (не показываем владельцу на главной «Моя компания») */}
         {tips.length > 0 && (
           <div className="card">
             <h3>{lang.dashboard.tips}</h3>
@@ -157,23 +160,25 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Последние обновления */}
-        <div className="card">
-          <h3>{lang.dashboard.recentUpdates}</h3>
-          <div className={styles.updates}>
-            {recentNotifs.length === 0 ? (
-              <p className={styles.empty}>{lang.common.noData}</p>
-            ) : (
-              recentNotifs.map(n => (
-                <div key={n.id} className={styles.updateItem}>
-                  <strong>{n.title}</strong>
-                  <p>{n.message}</p>
-                  <small>{new Date(n.created_at).toLocaleString()}</small>
-                </div>
-              ))
-            )}
+        {/* Последние обновления (не показываем владельцу на главной «Моя компания») */}
+        {true && (
+          <div className="card">
+            <h3>{lang.dashboard.recentUpdates}</h3>
+            <div className={styles.updates}>
+              {recentNotifs.length === 0 ? (
+                <p className={styles.empty}>{lang.common.noData}</p>
+              ) : (
+                recentNotifs.map(n => (
+                  <div key={n.id} className={styles.updateItem}>
+                    <strong>{n.title}</strong>
+                    <p>{n.message}</p>
+                    <small>{new Date(n.created_at).toLocaleString()}</small>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
       </>)}
     </div>

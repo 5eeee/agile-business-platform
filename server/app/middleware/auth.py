@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
-from app.models.user import User, UserRole, UserStatus
+from app.models.user import User, UserRole, UserStatus, ADMIN_ROLES
 
 security = HTTPBearer(auto_error=False)
 
@@ -91,7 +91,23 @@ async def get_current_user(
     return user
 
 
+FULL_ACCESS_ROLES = ADMIN_ROLES
+APPLICATIONS_ROLES = {UserRole.ADMIN, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.CONSULTANT}
+
+
 def require_admin(user: User = Depends(get_current_user)) -> User:
-    if user.role != UserRole.ADMIN:
+    if user.role not in FULL_ACCESS_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Требуются права администратора")
+    return user
+
+
+def require_applications_access(user: User = Depends(get_current_user)) -> User:
+    if user.role not in APPLICATIONS_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа к модулю заявок")
+    return user
+
+
+def require_non_consultant(user: User = Depends(get_current_user)) -> User:
+    if user.role == UserRole.CONSULTANT:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Консультантам недоступен этот раздел")
     return user

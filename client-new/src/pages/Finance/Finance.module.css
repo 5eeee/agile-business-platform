@@ -1,0 +1,323 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 8px 0;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 22px 24px;
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 96% 0%, rgba(229, 57, 53, .09), transparent 34%),
+    var(--color-surface);
+  box-shadow: 0 10px 30px var(--color-shadow);
+}
+
+.header h1 {
+  font-size: clamp(25px, 3vw, 32px);
+  font-weight: 760;
+  margin: 0 0 6px 0;
+  color: var(--color-text);
+  letter-spacing: -.035em;
+}
+
+.subtitle {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  margin: 0;
+}
+
+.periodSelector {
+  display: flex;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  padding: 4px;
+  border-radius: var(--radius-md);
+}
+
+.periodSelector button {
+  background: transparent;
+  border: none;
+  padding: 6px 16px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.periodSelector button.periodActive {
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Metrics Cards */
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.metricCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 8px 24px var(--color-shadow);
+}
+
+.metricCard:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cardTitle {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.iconWrapper {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.incomeIcon {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.expenseIcon {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.profitIcon {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.cardBody h2 {
+  font-size: 28px;
+  font-weight: 800;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.5px;
+}
+
+.trendUp {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  color: #10b981;
+  font-weight: 500;
+  margin: 0;
+}
+
+.trendDown {
+  font-size: 12.5px;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+/* Layout Grid */
+.layoutGrid {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 1024px) {
+  .layoutGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.leftCol, .rightCol {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Form Styles */
+.txForm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.formRow {
+  display: flex;
+  gap: 16px;
+}
+
+@media (max-width: 600px) {
+  .formRow {
+    flex-direction: column;
+    gap: 14px;
+  }
+}
+
+.formInput {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  font-size: 13.5px;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.formInput:focus {
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+/* Transaction Table */
+.tableWrapper {
+  overflow-x: auto;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+}
+
+.customTable {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.customTable th {
+  background: var(--color-bg-secondary);
+  padding: 12px 16px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.customTable td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border-light);
+  color: var(--color-text);
+}
+
+.customTable tr:last-child td {
+  border-bottom: none;
+}
+
+.categoryBadge {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.statusSuccess {
+  color: #10b981;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.statusPending {
+  color: #f59e0b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Budgets */
+.budgetProgressSection {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.budgetProgressItem {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.budgetProgressLabel {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.budgetProgressLabel span {
+  color: var(--color-text-secondary);
+}
+
+.progressBar {
+  height: 8px;
+  background: var(--color-border-light);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: 4px;
+}
+
+/* ROI items */
+.roiItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.roiSub {
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+  margin: 4px 0 0 0;
+}
+
+.roiBadge {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (max-width: 700px) {
+  .page { gap: 16px; padding-top: 0; }
+  .header { align-items: stretch; flex-direction: column; padding: 18px; border-radius: 17px; }
+  .periodSelector { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+  .periodSelector button { min-height: 42px; padding-inline: 8px; }
+  .metricsGrid { grid-template-columns: 1fr; gap: 12px; }
+  .metricCard { padding: 18px; }
+  .budgetProgressLabel { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .roiItem { align-items: flex-start; flex-direction: column; gap: 10px; }
+}

@@ -65,7 +65,7 @@ export default function PlacesPage() {
     <div className={`${styles.page} page-enter`}>
       <div className={styles.header}>
         <h1>{lang.places.title}</h1>
-        {user?.role === 'admin' && (
+        {user && ['admin', 'owner', 'deputy_owner'].includes(user.role) && (
           <div className={styles.actions}>
             <button className="btn btn-secondary btn-sm" onClick={handleInitDefaults}>
               {lang.places.loadDefaults}
@@ -136,7 +136,7 @@ export default function PlacesPage() {
                   </div>
                 )}
               </div>
-              {user?.role === 'admin' && (
+              {user && ['admin', 'owner', 'deputy_owner'].includes(user.role) && (
                 <button className={styles.deleteBtn} onClick={() => handleDelete(place.id)} aria-label={lang.common.delete}>
                   <X size={14} />
                 </button>

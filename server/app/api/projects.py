@@ -10,7 +10,7 @@ from app.database import get_db
 from app.models.project import Project, ProjectMember, ProjectRole
 from app.models.iteration import Iteration, IterationStatus
 from app.models.board_column import BoardColumn
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, ADMIN_ROLES
 from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectMemberAdd, ProjectOut, ProjectMemberOut
 from app.middleware.auth import get_current_user
 
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/projects", tags=["Проекты"])
 @router.get("", response_model=list[ProjectOut])
 async def list_projects(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     """Список проектов, доступных пользователю"""
-    if user.role == UserRole.ADMIN:
+    if user.role in ADMIN_ROLES:
         result = await db.execute(
             select(Project).where(Project.is_deleted == False).order_by(Project.created_at.desc())
         )
@@ -37,7 +37,7 @@ async def list_projects(db: AsyncSession = Depends(get_db), user: User = Depends
 @router.get("/archived/list", response_model=list[ProjectOut])
 async def list_archived_projects(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     """Список архивированных проектов"""
-    if user.role == UserRole.ADMIN:
+    if user.role in ADMIN_ROLES:
         result = await db.execute(
             select(Project).where(Project.is_deleted == True).order_by(Project.updated_at.desc())
         )
@@ -61,7 +61,7 @@ async def get_project(project_id: uuid.UUID, db: AsyncSession = Depends(get_db),
     if not project:
         raise HTTPException(status_code=404, detail="Проект не найден")
     # Verify project membership
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         member_result = await db.execute(
             select(ProjectMember).where(ProjectMember.project_id == project_id, ProjectMember.user_id == user.id)
         )
@@ -125,6 +125,8 @@ async def create_project(data: ProjectCreate, db: AsyncSession = Depends(get_db)
 
     await db.commit()
     await db.refresh(project)
+    from app.services.realtime import notify_project_watchers
+    await notify_project_watchers(db, project.id)
     return ProjectOut.model_validate(project)
 
 
@@ -137,7 +139,7 @@ async def update_project(project_id: uuid.UUID, data: ProjectUpdate, db: AsyncSe
         raise HTTPException(status_code=404, detail="Проект не найден")
     
     # Проверка прав: админ сайта или админ проекта
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         member_result = await db.execute(
             select(ProjectMember).where(ProjectMember.project_id == project_id, ProjectMember.user_id == user.id, ProjectMember.is_admin == True)
         )
@@ -150,29 +152,53 @@ async def update_project(project_id: uuid.UUID, data: ProjectUpdate, db: AsyncSe
     
     await db.commit()
     await db.refresh(project)
+    from app.services.realtime import notify_project_watchers
+    await notify_project_watchers(db, project_id)
     return ProjectOut.model_validate(project)
 
 
-@router.delete("/{project_id}")
-async def delete_project(project_id: uuid.UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    """Удаление проекта (мягкое) — только администратор"""
-    if user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Только администратор может удалять проекты")
-    
+@router.post("/{project_id}/archive")
+async def archive_project(project_id: uuid.UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    """Архивировать проект (скрыть из основного списка, данные сохраняются). Только администратор."""
+    if user.role not in ADMIN_ROLES:
+        raise HTTPException(status_code=403, detail="Только администратор может архивировать проекты")
+
     result = await db.execute(select(Project).where(Project.id == project_id))
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="Проект не найден")
-    
+    if project.is_deleted:
+        raise HTTPException(status_code=400, detail="Проект уже в архиве")
+
     project.is_deleted = True
     await db.commit()
-    return {"message": "Проект удалён"}
+    from app.services.realtime import notify_project_watchers
+    await notify_project_watchers(db, project_id)
+    return {"message": "Проект помещён в архив"}
+
+
+@router.delete("/{project_id}")
+async def delete_project(project_id: uuid.UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    """Безвозвратное удаление проекта и связанных данных (итерации, задачи, участники и т.д.). Только администратор."""
+    if user.role not in ADMIN_ROLES:
+        raise HTTPException(status_code=403, detail="Только администратор может удалять проекты")
+
+    result = await db.execute(select(Project).where(Project.id == project_id))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Проект не найден")
+
+    await db.delete(project)
+    await db.commit()
+    from app.services.realtime import notify_project_watchers
+    await notify_project_watchers(db, project_id)
+    return {"message": "Проект удалён безвозвратно"}
 
 
 @router.post("/{project_id}/restore")
 async def restore_project(project_id: uuid.UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     """Восстановление архивированного проекта"""
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         raise HTTPException(status_code=403, detail="Только администратор может восстанавливать проекты")
 
     result = await db.execute(select(Project).where(Project.id == project_id))
@@ -184,6 +210,8 @@ async def restore_project(project_id: uuid.UUID, db: AsyncSession = Depends(get_
 
     project.is_deleted = False
     await db.commit()
+    from app.services.realtime import notify_project_watchers
+    await notify_project_watchers(db, project_id)
     return {"message": "Проект восстановлен"}
 
 
@@ -191,7 +219,7 @@ async def restore_project(project_id: uuid.UUID, db: AsyncSession = Depends(get_
 async def add_member(project_id: uuid.UUID, data: ProjectMemberAdd, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     """Добавление участника в проект (только админ проекта)"""
     # Проверка прав
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         member_result = await db.execute(
             select(ProjectMember).where(ProjectMember.project_id == project_id, ProjectMember.user_id == user.id, ProjectMember.is_admin == True)
         )
@@ -208,13 +236,15 @@ async def add_member(project_id: uuid.UUID, data: ProjectMemberAdd, db: AsyncSes
     member = ProjectMember(project_id=project_id, user_id=data.user_id, is_admin=data.is_admin, role=data.role)
     db.add(member)
     await db.commit()
+    from app.services.realtime import notify_project_watchers
+    await notify_project_watchers(db, project_id)
     return {"message": "Участник добавлен"}
 
 
 @router.delete("/{project_id}/members/{user_id}")
 async def remove_member(project_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     """Удаление участника из проекта"""
-    if user.role != UserRole.ADMIN:
+    if user.role not in ADMIN_ROLES:
         member_result = await db.execute(
             select(ProjectMember).where(ProjectMember.project_id == project_id, ProjectMember.user_id == user.id, ProjectMember.is_admin == True)
         )
@@ -230,4 +260,6 @@ async def remove_member(project_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSess
     
     await db.delete(member)
     await db.commit()
+    from app.services.realtime import notify_project_watchers
+    await notify_project_watchers(db, project_id)
     return {"message": "Участник удалён"}

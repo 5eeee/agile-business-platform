@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppSelector } from '../../store/hooks';
 import api from '../../api/client';
+import { X, AlertTriangle, Info, Bell } from 'lucide-react';
 import styles from './NotificationToast.module.css';
 
 interface Toast {
@@ -12,6 +13,13 @@ interface Toast {
 
 const POLL_INTERVAL = 15000;
 const WS_BASE = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
+
+function ToastIcon({ type }: { type?: string }) {
+  if (type === 'deadline_overdue' || type === 'critical_divergence') return <AlertTriangle size={18} aria-hidden />;
+  if (type === 'deadline_today' || type === 'critical_warning') return <AlertTriangle size={18} aria-hidden />;
+  if (type === 'deadline_soon' || type === 'critical_info') return <Info size={18} aria-hidden />;
+  return <Bell size={18} aria-hidden />;
+}
 
 export default function NotificationToast() {
   const { user } = useAppSelector(s => s.auth);
@@ -48,8 +56,12 @@ export default function NotificationToast() {
       ws.onmessage = (e) => {
         try {
           const data = JSON.parse(e.data);
+          window.dispatchEvent(new CustomEvent('agile-realtime', { detail: data }));
           if (data.type === 'notification') {
             addToast(data.title, data.message, data.notification_type);
+            const nextCount = (lastCountRef.current ?? 0) + 1;
+            lastCountRef.current = nextCount;
+            window.dispatchEvent(new CustomEvent('unread-count-update', { detail: nextCount }));
           }
         } catch { /* ignore */ }
       };
@@ -145,18 +157,24 @@ export default function NotificationToast() {
   if (toasts.length === 0) return null;
 
   const toastClass = (type?: string) => {
-    if (type === 'deadline_overdue') return `${styles.toast} ${styles.toastError}`;
-    if (type === 'deadline_today') return `${styles.toast} ${styles.toastWarning}`;
-    if (type === 'deadline_soon') return `${styles.toast} ${styles.toastInfo}`;
+    if (type === 'deadline_overdue' || type === 'critical_divergence') return `${styles.toast} ${styles.toastError}`;
+    if (type === 'deadline_today' || type === 'critical_warning') return `${styles.toast} ${styles.toastWarning}`;
+    if (type === 'deadline_soon' || type === 'critical_info') return `${styles.toast} ${styles.toastInfo}`;
     return styles.toast;
   };
 
   return (
     <div className={styles.container}>
       {toasts.map(t => (
-        <div key={t.id} className={toastClass(t.type)} onClick={() => dismiss(t.id)}>
-          <div className={styles.title}>{t.title}</div>
-          <div className={styles.message}>{t.message}</div>
+        <div key={t.id} className={toastClass(t.type)} role="status">
+          <span className={styles.icon}><ToastIcon type={t.type} /></span>
+          <div className={styles.content}>
+            <div className={styles.title}>{t.title}</div>
+            <div className={styles.message}>{t.message}</div>
+          </div>
+          <button type="button" className={styles.close} onClick={() => dismiss(t.id)} aria-label="Закрыть уведомление">
+            <X size={15} aria-hidden />
+          </button>
         </div>
       ))}
     </div>

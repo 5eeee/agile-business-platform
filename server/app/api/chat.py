@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models.chat import ChatMessage, ChatPoll, ChatPollOption, ChatPollVote
 from app.models.project import ProjectMember
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, ADMIN_ROLES
 from app.schemas.chat import ChatMessageCreate, ChatMessageUpdate, ChatMessageOut, PollCreate, PollVote
 from app.middleware.auth import get_current_user
 from app.dependencies import get_project_member_by_iteration
@@ -39,14 +39,14 @@ async def search_chat(
         iteration = iter_result.scalar_one_or_none()
         if not iteration:
             raise HTTPException(status_code=404, detail="Итерация не найдена")
-        if user.role != UserRole.ADMIN:
+        if user.role not in ADMIN_ROLES:
             member_result = await db.execute(
                 select(ProjectMember).where(ProjectMember.project_id == iteration.project_id, ProjectMember.user_id == user.id)
             )
             if not member_result.scalar_one_or_none():
                 raise HTTPException(status_code=403, detail="Вы не являетесь участником этого проекта")
     else:
-        if user.role != UserRole.ADMIN:
+        if user.role not in ADMIN_ROLES:
             from app.models.iteration import Iteration
             member_iters = await db.execute(
                 select(Iteration.id)
@@ -291,7 +291,7 @@ async def delete_message(message_id: uuid.UUID, db: AsyncSession = Depends(get_d
     if not msg:
         raise HTTPException(status_code=404, detail="Сообщение не найдено")
     
-    if msg.user_id != user.id and user.role != UserRole.ADMIN:
+    if msg.user_id != user.id and user.role not in ADMIN_ROLES:
         raise HTTPException(status_code=403, detail="Нет прав на удаление")
     
     # Delete attached file from S3 if present
@@ -336,7 +336,7 @@ async def create_poll(
     # Создаём сообщение с опросом
     msg = ChatMessage(
         iteration_id=iteration_id, user_id=user.id,
-        content=f"📊 Опрос: {data.question}", poll_id=poll.id,
+        content=f"Опрос: {data.question}", poll_id=poll.id,
     )
     db.add(msg)
     await db.commit()

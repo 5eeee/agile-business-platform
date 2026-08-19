@@ -16,6 +16,8 @@ class Event(Base):
     location: Mapped[str] = mapped_column(String(255), nullable=True)
     photo_url: Mapped[str] = mapped_column(String(500), nullable=True)
     event_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    # internal — внутреннее событие компании; external — внешнее
+    event_kind: Mapped[str] = mapped_column(String(20), nullable=False, default="internal")
     
     creator_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
