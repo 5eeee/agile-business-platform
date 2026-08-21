@@ -37,6 +37,26 @@ function averageFields(payload, fields) {
   return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
 }
 
+function normalizeLegacyOwner(value) {
+  if (Array.isArray(value)) return value.map(normalizeLegacyOwner);
+  if (!value || typeof value !== 'object') return value;
+  const normalized = { ...value };
+  for (const [key, child] of Object.entries(normalized)) {
+    if (child && typeof child === 'object') normalized[key] = normalizeLegacyOwner(child);
+  }
+  const email = String(normalized.email || '').trim().toLowerCase();
+  const isCanonicalOwner = email === 'admin@agile.com' || email === 'agilebusiness';
+  const isNamedLegacyOwner = normalized.role === 'admin'
+    && normalized.name === 'Алексей'
+    && normalized.last_name === 'Девятов';
+  if (isCanonicalOwner || isNamedLegacyOwner) {
+    normalized.name = 'Алексей';
+    normalized.last_name = 'Девятов';
+    normalized.role = 'owner';
+  }
+  return normalized;
+}
+
 function normalizeKpiPayload(payload, profile, managerDetails) {
   const role = payload.role || profile?.role || 'user';
   const hasOccupationalKpi = payload.has_occupational_kpi ?? LEADERSHIP_ROLES.has(role);
@@ -124,7 +144,9 @@ export default async function handler(req, res) {
     });
     if (!response.ok) return null;
     const contentType = response.headers.get('content-type') || '';
-    return contentType.includes('application/json') ? response.json() : null;
+    return contentType.includes('application/json')
+      ? normalizeLegacyOwner(await response.json())
+      : null;
   };
 
   try {
@@ -146,7 +168,7 @@ export default async function handler(req, res) {
       || /^gamification\/kpi\/user\/[^/]+$/.test(rawPath)
     );
     if (upstream.ok && isKpiRead && (upstream.headers.get('content-type') || '').includes('application/json')) {
-      const payload = JSON.parse(upstreamBody.toString('utf8'));
+      const payload = normalizeLegacyOwner(JSON.parse(upstreamBody.toString('utf8')));
       const targetUserId = rawPath.startsWith('gamification/kpi/user/')
         ? rawPath.slice('gamification/kpi/user/'.length)
         : null;
@@ -154,6 +176,20 @@ export default async function handler(req, res) {
       const managerDetails = targetUserId ? null : await fetchBackendJson('gamification/kpi/manager/details');
       res.setHeader('content-type', 'application/json; charset=utf-8');
       res.end(JSON.stringify(normalizeKpiPayload(payload, profile, managerDetails)));
+      return;
+    }
+    const shouldNormalizeUserResponse = upstream.ok
+      && req.method === 'GET'
+      && (upstream.headers.get('content-type') || '').includes('application/json')
+      && (
+        rawPath === 'auth/me'
+        || rawPath === 'users'
+        || rawPath.startsWith('users/')
+        || rawPath === 'admin/users'
+      );
+    if (shouldNormalizeUserResponse) {
+      res.setHeader('content-type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify(normalizeLegacyOwner(JSON.parse(upstreamBody.toString('utf8')))));
       return;
     }
     res.end(upstreamBody);
