@@ -44,7 +44,7 @@ function normalizeUser(raw: User): User {
 
   // Compatibility for the first production owner created by the legacy seed.
   // The backend performs the same normalization after its rolling update.
-  if (email === 'admin@agile.com') {
+  if (email === 'admin@agile.com' || email === 'agilebusiness') {
     user.name = 'Алексей';
     user.last_name = 'Девятов';
     user.role = 'owner';
