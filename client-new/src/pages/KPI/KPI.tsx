@@ -15,6 +15,7 @@ import {
   type ManagerReactivity
 } from '../../api/gamification';
 import { useAppSelector } from '../../store/hooks';
+import api from '../../api/client';
 import { t } from '../../i18n';
 import styles from './KPI.module.css';
 import { kpiDataList, kpiCategories, type KPICardData } from './kpiData';
@@ -81,9 +82,27 @@ export default function KPIPage() {
     setLoading(true);
     setError(null);
     try {
-      const { data } = isViewingOther && targetUserId
+      const { data: rawKpi } = isViewingOther && targetUserId
         ? await gamificationApi.getUserKPI(targetUserId)
         : await gamificationApi.getMyKPI();
+      // Совместимость на время rolling deploy backend: старая схема KPI не
+      // возвращала роль и должностную группу. Берём организационные данные из
+      // профиля и никогда не показываем руководителя как рядового сотрудника.
+      let profileRole = user?.role;
+      let profileDepartment = user?.department_id ?? null;
+      if (isViewingOther && targetUserId) {
+        const profile = await api.get(`/users/${encodeURIComponent(targetUserId)}`);
+        profileRole = profile.data?.role;
+        profileDepartment = profile.data?.department_id ?? null;
+      }
+      const effectiveRole = rawKpi.role || profileRole || 'user';
+      const isLeadershipRole = ['admin', 'owner', 'deputy_owner'].includes(effectiveRole);
+      const data: UserKPI = {
+        ...rawKpi,
+        role: effectiveRole as UserKPI['role'],
+        department_id: rawKpi.department_id ?? profileDepartment,
+        has_occupational_kpi: rawKpi.has_occupational_kpi ?? isLeadershipRole,
+      };
       setKpi(data);
 
       if (canInspectTeam && !isViewingOther) {
