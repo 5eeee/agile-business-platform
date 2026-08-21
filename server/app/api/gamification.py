@@ -96,6 +96,24 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+def _can_manage_employee(manager: User, employee: User) -> bool:
+    """Проверить управленческий доступ без возможности разбирать собственное падение."""
+    if manager.id == employee.id:
+        return False
+    if manager.role in {UserRole.OWNER, UserRole.DEPUTY_OWNER}:
+        return True
+    return bool(
+        manager.role == UserRole.ADMIN
+        and (
+            employee.manager_id == manager.id
+            or (
+                manager.department_id
+                and employee.department_id == manager.department_id
+            )
+        )
+    )
+
+
 # ===================== COINS =====================
 
 @router.get("/coins/balance", response_model=CoinBalanceOut)
@@ -601,8 +619,22 @@ def is_overtime_review(review_date: datetime) -> bool:
 @router.get("/kpi/drops/active", response_model=list[KPIDropOut])
 async def get_active_drops(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     """Получить активные падения KPI сотрудников"""
-    if user.role in ADMIN_ROLES or user.role in [UserRole.OWNER, UserRole.DEPUTY_OWNER]:
+    if user.role in {UserRole.OWNER, UserRole.DEPUTY_OWNER}:
         q = select(KPIDrop).where(KPIDrop.resolved == False).order_by(KPIDrop.drop_date.desc())
+    elif user.role == UserRole.ADMIN:
+        scope = [User.manager_id == user.id]
+        if user.department_id:
+            scope.append(User.department_id == user.department_id)
+        q = (
+            select(KPIDrop)
+            .join(User, User.id == KPIDrop.employee_id)
+            .where(
+                KPIDrop.resolved == False,
+                KPIDrop.employee_id != user.id,
+                or_(*scope),
+            )
+            .order_by(KPIDrop.drop_date.desc())
+        )
     else:
         q = select(KPIDrop).where(KPIDrop.employee_id == user.id, KPIDrop.resolved == False).order_by(KPIDrop.drop_date.desc())
         
@@ -632,6 +664,15 @@ async def submit_performance_review(
     user: User = Depends(require_admin)
 ):
     """Создать разбор падения KPI сотрудника"""
+    drop_obj = None
+    if data.drop_id:
+        drop_obj = await db.get(KPIDrop, data.drop_id)
+        if not drop_obj:
+            raise HTTPException(status_code=404, detail="Падение KPI не найдено")
+        employee = await db.get(User, drop_obj.employee_id)
+        if not employee or not _can_manage_employee(user, employee):
+            raise HTTPException(status_code=403, detail="Разбор доступен только руководителю этого сотрудника")
+
     errors = []
     if not data.kpi_type or data.kpi_type.strip() == "":
         errors.append("KPI")
@@ -683,11 +724,7 @@ async def submit_performance_review(
             raise HTTPException(status_code=400, detail="Разбор по этому падению уже проведен")
             
     reaction_days_dec = Decimal("1.0")
-    drop_obj = None
     if data.drop_id:
-        drop_obj = await db.get(KPIDrop, data.drop_id)
-        if not drop_obj:
-            raise HTTPException(status_code=404, detail="Падение KPI не найдено")
         reaction_days_dec = calculate_working_days(drop_obj.drop_date, now)
         drop_obj.resolved = True
             
