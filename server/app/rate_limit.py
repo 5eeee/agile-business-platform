@@ -11,10 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 def _get_real_ip(request: Request) -> str:
-    """Extract real client IP from X-Forwarded-For (behind nginx proxy)."""
+    """Use the address appended by the nearest trusted proxy, never client-controlled first hops."""
     xff = request.headers.get("x-forwarded-for")
     if xff:
-        return xff.split(",")[0].strip()
+        addresses = [part.strip() for part in xff.split(",") if part.strip()]
+        if addresses:
+            return addresses[-1]
     xri = request.headers.get("x-real-ip")
     if xri:
         return xri.strip()

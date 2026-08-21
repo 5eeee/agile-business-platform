@@ -121,7 +121,7 @@ export default function App() {
   }
 
   return (
-    <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    <HashRouter>
       <NotificationToast />
       <div ref={overlayRef} className="theme-transition-overlay" />
       <Routes>

@@ -19,6 +19,12 @@ import { kpiDataList, kpiCategories, type KPICardData } from './kpiData';
 import WeeklyReportsPanel from './WeeklyReportsPanel';
 import IdeasPanel from './IdeasPanel';
 
+const finiteKpiValue = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 export default function KPIPage() {
   const { user } = useAppSelector(s => s.auth);
   const { language } = useAppSelector(s => s.ui);
@@ -55,22 +61,15 @@ export default function KPIPage() {
       setKpi(data);
 
       if (user && ['admin', 'owner', 'deputy_owner'].includes(user.role)) {
-        const mgrRes = await gamificationApi.getManagerKPIDetails();
-        setManagerDetails(mgrRes.data);
+        const [managerResult, departmentResult, reactivityResult] = await Promise.allSettled([
+          gamificationApi.getManagerKPIDetails(),
+          gamificationApi.getDepartmentKPIHealth(),
+          gamificationApi.getManagerReactivity(),
+        ]);
 
-        try {
-          const deptRes = await gamificationApi.getDepartmentKPIHealth();
-          setDepartmentHealth(deptRes.data);
-        } catch (e) {
-          console.error("Failed to load department KPI health:", e);
-        }
-
-        try {
-          const reactRes = await gamificationApi.getManagerReactivity();
-          setManagerReactivity(reactRes.data);
-        } catch (e) {
-          console.error("Failed to load manager reactivity:", e);
-        }
+        setManagerDetails(managerResult.status === 'fulfilled' ? managerResult.value.data : null);
+        setDepartmentHealth(departmentResult.status === 'fulfilled' ? departmentResult.value.data : null);
+        setManagerReactivity(reactivityResult.status === 'fulfilled' ? reactivityResult.value.data : null);
       }
     } catch (e: any) {
       setError(e?.response?.data?.detail || 'Не удалось загрузить KPI');
@@ -194,29 +193,31 @@ export default function KPIPage() {
   const liveEmployeeKpis = useMemo(() => {
     if (!kpi) return [];
     return [
-      { key: 'KPI1', title: 'Соблюдение дедлайнов', value: kpi.kpi1_deadlines },
-      { key: 'KPI2', title: 'Пунктуальность', value: kpi.kpi2_punctuality },
-      { key: 'KPI3', title: 'Инициативность', value: kpi.kpi3_initiative },
-      { key: 'KPI4', title: 'Сверхурочная загрузка', value: kpi.kpi4_overtime },
-      { key: 'KPI5', title: 'Качество работ', value: kpi.kpi5_quality },
-      { key: 'KPI8', title: 'Внимательность', value: kpi.kpi8_attentiveness },
-      { key: 'KPI9', title: 'Бонусный индекс', value: kpi.kpi9_bonus },
-      { key: 'KPI10', title: 'Ответственность', value: kpi.kpi10_responsibility },
-      { key: 'TEAM', title: 'Удовлетворённость заказчика', value: kpi.kpi_customer_satisfaction },
+      { key: 'KPI1', title: 'Соблюдение дедлайнов', value: finiteKpiValue(kpi.kpi1_deadlines) },
+      { key: 'KPI2', title: 'Пунктуальность', value: finiteKpiValue(kpi.kpi2_punctuality) },
+      { key: 'KPI3', title: 'Инициативность', value: finiteKpiValue(kpi.kpi3_initiative) },
+      { key: 'KPI4', title: 'Сверхурочная загрузка', value: finiteKpiValue(kpi.kpi4_overtime) },
+      { key: 'KPI5', title: 'Качество работ', value: finiteKpiValue(kpi.kpi5_quality) },
+      { key: 'KPI8', title: 'Внимательность', value: finiteKpiValue(kpi.kpi8_attentiveness) },
+      { key: 'KPI9', title: 'Бонусный индекс', value: finiteKpiValue(kpi.kpi9_bonus) },
+      { key: 'KPI10', title: 'Ответственность', value: finiteKpiValue(kpi.kpi10_responsibility) },
+      { key: 'TEAM', title: 'Удовлетворённость заказчика', value: finiteKpiValue(kpi.kpi_customer_satisfaction) },
     ];
   }, [kpi]);
 
   const liveOverall = useMemo(() => {
     const values = liveEmployeeKpis
-      .filter(item => item.key !== 'KPI9' && item.value !== null)
-      .map(item => Number(item.value));
+      .filter(item => item.key !== 'KPI9')
+      .map(item => item.value)
+      .filter((value): value is number => value !== null);
     return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
   }, [liveEmployeeKpis]);
 
   const performanceFactor = useMemo(() => {
     if (liveOverall === null) return null;
     const critical = [kpi?.kpi1_deadlines, kpi?.kpi2_punctuality, kpi?.kpi5_quality]
-      .filter((value): value is number => value !== null && value !== undefined);
+      .map(finiteKpiValue)
+      .filter((value): value is number => value !== null);
     if (liveOverall >= 90 && critical.length === 3 && critical.every(value => value >= 90)) return 1.1;
     if (liveOverall < 70 || critical.some(value => value < 70)) return 0.9;
     return 1.0;
@@ -244,17 +245,18 @@ export default function KPIPage() {
           <div className={styles.grid}>
             {liveEmployeeKpis.map(item => {
               const value = item.value;
+              const carryover = finiteKpiValue(kpi.kpi9_carryover) ?? 0;
               const tone = value === null ? '#94a3b8' : value >= 90 ? '#10b981' : value >= 70 ? '#f59e0b' : '#ef4444';
               return (
                 <div className={styles.card} key={item.key}>
                   <Activity size={18} style={{ color: tone }} />
                   <div>
                     <strong style={{ color: tone }}>
-                      {value === null ? '—' : `${Math.round(value)}${item.key === 'KPI9' && kpi.kpi9_carryover > 0 ? '% +' : '%'}`}
+                      {value === null ? '—' : `${Math.round(value)}${item.key === 'KPI9' && carryover > 0 ? '% +' : '%'}`}
                     </strong>
                     <span>{item.title}</span>
-                    {item.key === 'KPI9' && kpi.kpi9_carryover > 0 && (
-                      <small>+{kpi.kpi9_carryover}% перенесено авансом</small>
+                    {item.key === 'KPI9' && carryover > 0 && (
+                      <small>+{carryover}% перенесено авансом</small>
                     )}
                   </div>
                 </div>

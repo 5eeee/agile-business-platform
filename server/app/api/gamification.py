@@ -608,7 +608,7 @@ async def get_active_drops(db: AsyncSession = Depends(get_db), user: User = Depe
 async def submit_performance_review(
     data: PerformanceReviewCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user)
+    user: User = Depends(require_admin)
 ):
     """Создать разбор падения KPI сотрудника"""
     errors = []
@@ -665,9 +665,10 @@ async def submit_performance_review(
     drop_obj = None
     if data.drop_id:
         drop_obj = await db.get(KPIDrop, data.drop_id)
-        if drop_obj:
-            reaction_days_dec = calculate_working_days(drop_obj.drop_date, now)
-            drop_obj.resolved = True
+        if not drop_obj:
+            raise HTTPException(status_code=404, detail="Падение KPI не найдено")
+        reaction_days_dec = calculate_working_days(drop_obj.drop_date, now)
+        drop_obj.resolved = True
             
     review = PerformanceReview(
         drop_id=data.drop_id,

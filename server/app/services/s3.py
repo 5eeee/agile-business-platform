@@ -11,11 +11,19 @@ from fastapi import UploadFile, HTTPException
 from app.config import settings
 
 ALLOWED_EXTENSIONS = {
-    'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg',
+    'jpg', 'jpeg', 'png', 'gif', 'webp',
     'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
     'txt', 'csv', 'md', 'json', 'xml',
     'zip', 'rar', '7z', 'tar', 'gz',
     'mp3', 'mp4', 'wav', 'ogg', 'webm',
+}
+
+SAFE_CONTENT_TYPES = {
+    'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+    'gif': 'image/gif', 'webp': 'image/webp', 'pdf': 'application/pdf',
+    'mp3': 'audio/mpeg', 'mp4': 'video/mp4', 'wav': 'audio/wav',
+    'ogg': 'audio/ogg', 'webm': 'video/webm', 'txt': 'text/plain',
+    'csv': 'text/csv', 'json': 'application/json', 'xml': 'application/xml',
 }
 
 
@@ -112,15 +120,16 @@ async def upload_file_to_s3(file: UploadFile, prefix: str = "uploads", encrypt: 
 
     should_encrypt = prefix.startswith(_ENCRYPTED_PREFIXES) if encrypt is None else encrypt
     payload = _encrypt(content, key) if should_encrypt else content
+    safe_content_type = SAFE_CONTENT_TYPES.get(ext, "application/octet-stream")
     metadata = {
         "encrypted": "aes-256-gcm" if should_encrypt else "none",
-        "original-content-type": file.content_type or "application/octet-stream",
+        "original-content-type": safe_content_type,
     }
     s3.put_object(
         Bucket=settings.S3_BUCKET,
         Key=key,
         Body=payload,
-        ContentType="application/octet-stream" if should_encrypt else (file.content_type or "application/octet-stream"),
+        ContentType="application/octet-stream" if should_encrypt else safe_content_type,
         Metadata=metadata,
     )
     return f"/api/secure-files/{key}" if should_encrypt else f"/files/{key}"

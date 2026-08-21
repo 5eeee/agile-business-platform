@@ -12,6 +12,16 @@ async function readBody(req) {
 }
 
 export default async function handler(req, res) {
+  const unsafeMethod = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+  const requestOrigin = req.headers.origin;
+  const expectedOrigin = `https://${req.headers.host}`;
+  if (unsafeMethod && (
+    req.headers['sec-fetch-site'] === 'cross-site'
+    || (requestOrigin && requestOrigin !== expectedOrigin)
+  )) {
+    return res.status(403).json({ detail: 'Запрос с этого источника запрещён' });
+  }
+
   const rawPath = Array.isArray(req.query.path) ? req.query.path.join('/') : (req.query.path || '');
   const url = new URL(`/api/${rawPath}`, BACKEND_ORIGIN);
   for (const [key, value] of Object.entries(req.query)) {

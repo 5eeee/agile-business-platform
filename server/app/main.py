@@ -34,6 +34,7 @@ from app.middleware.csrf import CSRFMiddleware
 from app.services.s3 import ensure_bucket
 from app.services.search import ensure_index
 from app.services.telegram import notify_new_message
+from app.services.redis import is_token_blacklisted
 
 # --- Structured JSON Logging ---
 from pythonjsonlogger import jsonlogger
@@ -275,6 +276,9 @@ async def ws_chat(websocket: WebSocket, iteration_id: str):
             await websocket.close(code=4001)
             return
         user_id = payload.get("sub")
+        if await is_token_blacklisted(token):
+            await websocket.close(code=4001)
+            return
     except Exception:
         await websocket.close(code=4001)
         return
@@ -288,7 +292,7 @@ async def ws_chat(websocket: WebSocket, iteration_id: str):
             return
         user_result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
         ws_user = user_result.scalar_one_or_none()
-        if not ws_user:
+        if not ws_user or ws_user.status != UserStatus.ACTIVE or not ws_user.email_confirmed:
             await websocket.close(code=4001)
             return
         if ws_user.role not in ADMIN_ROLES:
@@ -424,21 +428,25 @@ async def ws_status(websocket: WebSocket):
             await websocket.close(code=4001)
             return
         user_id = payload.get("sub")
+        if await is_token_blacklisted(token):
+            await websocket.close(code=4001)
+            return
     except Exception:
         await websocket.close(code=4001)
         return
     
-    await websocket.accept()
-    manager.add_user_socket(user_id, websocket)
-
-    # Обновляем онлайн-статус
     async with async_session() as db:
         result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
         user = result.scalar_one_or_none()
-        if user:
-            user.is_online = True
-            user.last_seen = datetime.utcnow()
-            await db.commit()
+        if not user or user.status != UserStatus.ACTIVE or not user.email_confirmed:
+            await websocket.close(code=4001)
+            return
+        user.is_online = True
+        user.last_seen = datetime.utcnow()
+        await db.commit()
+
+    await websocket.accept()
+    manager.add_user_socket(user_id, websocket)
     
     try:
         while True:

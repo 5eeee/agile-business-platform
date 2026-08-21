@@ -67,7 +67,8 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const displayName = (user: AdminUser) => `${user.last_name || ''} ${user.name}`.trim();
-const valueText = (value: number | null | undefined) => value == null ? '—' : `${Math.round(value)}%`;
+const valueText = (value: number | null | undefined) =>
+  Number.isFinite(value) ? `${Math.round(value as number)}%` : '—';
 const valueColor = (value: number | null | undefined) => {
   if (value == null) return 'var(--color-text-muted)';
   if (value >= 90) return 'var(--color-success)';

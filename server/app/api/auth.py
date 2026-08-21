@@ -1,5 +1,6 @@
 # API аутентификации
 import uuid
+import hashlib
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy import select, func
@@ -316,7 +317,13 @@ async def forgot_password(
     # Всегда возвращаем успех (не раскрываем, существует ли email)
     if user:
         token = pyjwt.encode(
-            {"sub": str(user.id), "type": "reset", "exp": datetime.utcnow() + timedelta(hours=1)},
+            {
+                "sub": str(user.id),
+                "type": "reset",
+                "jti": uuid.uuid4().hex,
+                "pwd": hashlib.sha256(user.password_hash.encode("utf-8")).hexdigest(),
+                "exp": datetime.utcnow() + timedelta(hours=1),
+            },
             settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM,
         )
         try:
@@ -356,6 +363,10 @@ async def reset_password(
     if not user:
         raise HTTPException(status_code=400, detail="Пользователь не найден")
 
+    current_password_fingerprint = hashlib.sha256(user.password_hash.encode("utf-8")).hexdigest()
+    if not payload.get("jti") or payload.get("pwd") != current_password_fingerprint:
+        raise HTTPException(status_code=400, detail="Ссылка сброса уже использована или недействительна")
+
     if len(data.new_password) < 6:
         raise HTTPException(status_code=400, detail="Пароль должен быть минимум 6 символов")
 
@@ -390,6 +401,8 @@ async def confirm_email(token: str, db: AsyncSession = Depends(get_db)):
 @router.post("/2fa/setup")
 async def setup_totp(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Генерация TOTP-секрета и QR-кода для настройки 2FA"""
+    if user.totp_enabled:
+        raise HTTPException(status_code=409, detail="2FA уже включена. Для перенастройки сначала отключите её текущим кодом")
     secret = pyotp.random_base32()
     user.totp_secret = secret
     await db.commit()

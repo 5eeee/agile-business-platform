@@ -332,7 +332,7 @@ export default function ProfilePage() {
                 <div className={styles.kpiCard} key={item.key}>
                   <span className={styles.kpiIcon} aria-hidden>{item.icon}</span>
                   <div className={styles.kpiBody}>
-                    <strong>{item.value === null ? '—' : `${Math.round(Number(item.value))}%`}</strong>
+                    <strong>{Number.isFinite(Number(item.value)) && item.value != null ? `${Math.round(Number(item.value))}%` : '—'}</strong>
                     <span className={styles.kpiTitle}>{item.title}</span>
                     <small>{item.description}</small>
                   </div>

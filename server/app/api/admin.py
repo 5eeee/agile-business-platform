@@ -22,6 +22,23 @@ from app.services.email import send_decision_email
 router = APIRouter(prefix="/admin", tags=["Администрирование"])
 
 
+def _protect_role_hierarchy(admin: User, target: User, update_data: dict | None = None) -> None:
+    """Супер-владелец неизменяем, а привилегированные роли управляются только владельцем."""
+    update_data = update_data or {}
+    role_or_status_change = "role" in update_data or "status" in update_data
+    requested_role = update_data.get("role")
+
+    if target.role == UserRole.OWNER and role_or_status_change:
+        raise HTTPException(status_code=403, detail="Роль и статус супер-владельца защищены")
+    if target.role == UserRole.OWNER and admin.id != target.id:
+        raise HTTPException(status_code=403, detail="Супер-владельцем может управлять только он сам")
+    if admin.role != UserRole.OWNER and (
+        target.role in ADMIN_ROLES
+        or (requested_role and UserRole(requested_role) in ADMIN_ROLES)
+    ):
+        raise HTTPException(status_code=403, detail="Привилегированные роли изменяет только супер-владелец")
+
+
 @router.get("/users", response_model=list[UserAdminOut])
 async def list_all_users(db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)):
     """Список всех пользователей (для админки)"""
@@ -128,6 +145,7 @@ async def update_user(user_id: uuid.UUID, data: AdminUserUpdate, db: AsyncSessio
         raise HTTPException(status_code=404, detail="Пользователь не найден")
     
     update_data = data.model_dump(exclude_unset=True)
+    _protect_role_hierarchy(admin, user, update_data)
     for key, value in update_data.items():
         if key == "role" and value:
             setattr(user, key, UserRole(value))
@@ -199,6 +217,7 @@ async def reset_password(user_id: uuid.UUID, db: AsyncSession = Depends(get_db),
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
+    _protect_role_hierarchy(admin, user)
     
     new_password = secrets.token_urlsafe(12)
     user.password_hash = hash_password(new_password)

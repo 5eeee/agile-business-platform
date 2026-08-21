@@ -257,7 +257,7 @@ export const gamificationApi = {
   submitPerformanceReview: (data: PerformanceReviewCreate) =>
     api.post<PerformanceReview>('/gamification/kpi/reviews', data),
   getManagerKPIDetails: () =>
-    api.get<ManagerKPIDetails>('/gamification/kpi/manager/details'),
+    api.get<ManagerKPIDetails>('/gamification/kpi/manager/details', { _silentGlobalError: true } as any),
   simulateKPIDrop: (data: { kpi_type: string; drop_value: number; employee_id?: string }) =>
     api.post<any>(`/gamification/kpi/drops/simulate?kpi_type=${encodeURIComponent(data.kpi_type)}&drop_value=${data.drop_value}${data.employee_id ? `&employee_id=${encodeURIComponent(data.employee_id)}` : ''}`),
   
