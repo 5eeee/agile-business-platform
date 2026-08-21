@@ -26,9 +26,12 @@ export default function NotificationToast() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const lastCountRef = useRef<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const toastSequenceRef = useRef(0);
 
   const addToast = useCallback((title: string, message: string, type?: string) => {
-    setToasts(prev => [...prev, { id: Date.now().toString(), title, message, type }]);
+    toastSequenceRef.current += 1;
+    const id = `local-${Date.now()}-${toastSequenceRef.current}`;
+    setToasts(prev => [...prev, { id, title, message, type }]);
   }, []);
 
   const dismiss = useCallback((id: string) => {

@@ -53,6 +53,13 @@ function ApplicationsGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function HomeGuard({ children }: { children: React.ReactNode }) {
+  const { user } = useAppSelector(s => s.auth);
+  if (user?.role === 'consultant') return <Navigate to="/applications" />;
+  if (user && !['admin', 'owner', 'deputy_owner'].includes(user.role)) return <Navigate to="/projects" />;
+  return <>{children}</>;
+}
+
 export default function App() {
   const dispatch = useAppDispatch();
   const { isFired, fireMessage, user } = useAppSelector(s => s.auth);
@@ -128,18 +135,18 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/review/:token" element={<Suspense fallback={<Spinner />}><CustomerReviewPage /></Suspense>} />
         <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
-          <Route index element={<Suspense fallback={<Spinner />}><HomePage /></Suspense>} />
+          <Route index element={<Suspense fallback={<Spinner />}><HomeGuard><HomePage /></HomeGuard></Suspense>} />
           <Route path="projects" element={<Suspense fallback={<Spinner />}><ProjectsGuard><ProjectsPage /></ProjectsGuard></Suspense>} />
           <Route path="project/:id" element={<Suspense fallback={<Spinner />}><ProjectsGuard><ProjectDetailPage /></ProjectsGuard></Suspense>} />
-          <Route path="events" element={<Suspense fallback={<Spinner />}><EventsPage /></Suspense>} />
-          <Route path="places" element={<Suspense fallback={<Spinner />}><PlacesPage /></Suspense>} />
-          <Route path="music" element={<Suspense fallback={<Spinner />}><MusicPage /></Suspense>} />
-          <Route path="analytics" element={<Suspense fallback={<Spinner />}><AnalyticsPage /></Suspense>} />
-          <Route path="finance" element={<Suspense fallback={<Spinner />}><FinancePage /></Suspense>} />
-          <Route path="shop" element={<Suspense fallback={<Spinner />}><ShopPage /></Suspense>} />
+          <Route path="events" element={<Suspense fallback={<Spinner />}><AdminRoute><EventsPage /></AdminRoute></Suspense>} />
+          <Route path="places" element={<Suspense fallback={<Spinner />}><AdminRoute><PlacesPage /></AdminRoute></Suspense>} />
+          <Route path="music" element={<Suspense fallback={<Spinner />}><AdminRoute><MusicPage /></AdminRoute></Suspense>} />
+          <Route path="analytics" element={<Suspense fallback={<Spinner />}><AdminRoute><AnalyticsPage /></AdminRoute></Suspense>} />
+          <Route path="finance" element={<Suspense fallback={<Spinner />}><AdminRoute><FinancePage /></AdminRoute></Suspense>} />
+          <Route path="shop" element={<Suspense fallback={<Spinner />}><AdminRoute><ShopPage /></AdminRoute></Suspense>} />
           <Route path="kpi" element={<Suspense fallback={<Spinner />}><KPIPage /></Suspense>} />
-          <Route path="call" element={<Suspense fallback={<Spinner />}><CallPage /></Suspense>} />
-          <Route path="leaderboard" element={<Suspense fallback={<Spinner />}><LeaderboardPage /></Suspense>} />
+          <Route path="call" element={<Suspense fallback={<Spinner />}><AdminRoute><CallPage /></AdminRoute></Suspense>} />
+          <Route path="leaderboard" element={<Suspense fallback={<Spinner />}><AdminRoute><LeaderboardPage /></AdminRoute></Suspense>} />
           <Route path="profile" element={<Suspense fallback={<Spinner />}><ProfilePage /></Suspense>} />
           <Route path="applications" element={<Suspense fallback={<Spinner />}><ApplicationsGuard><ApplicationsPage /></ApplicationsGuard></Suspense>} />
           <Route path="applications/:id" element={<Suspense fallback={<Spinner />}><ApplicationsGuard><ApplicationDetailPage /></ApplicationsGuard></Suspense>} />

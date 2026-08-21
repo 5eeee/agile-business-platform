@@ -62,6 +62,33 @@ async def _sync_task_assignees(session: AsyncSession, task_id: uuid.UUID, user_i
             session.add(TaskAssignee(task_id=task_id, user_id=uid))
 
 
+async def _visible_task_user_ids(db: AsyncSession, user: User) -> set[uuid.UUID] | None:
+    """Возвращает контур людей, чьи задачи разрешено видеть.
+
+    None означает полный контур владельца/заместителя. Руководитель видит свой
+    отдел и прямых подчинённых, штатный сотрудник — только себя.
+    """
+    if user.role in {UserRole.OWNER, UserRole.DEPUTY_OWNER}:
+        return None
+    if user.role != UserRole.ADMIN:
+        return {user.id}
+
+    conditions = [User.id == user.id, User.manager_id == user.id]
+    if user.department_id:
+        conditions.append(User.department_id == user.department_id)
+    result = await db.execute(select(User.id).where(or_(*conditions)))
+    return {row[0] for row in result.all()} | {user.id}
+
+
+async def _can_view_task(db: AsyncSession, user: User, task: Task) -> bool:
+    visible_ids = await _visible_task_user_ids(db, user)
+    if visible_ids is None:
+        return True
+    task_people = set(_ordered_assignee_ids_from_task(task))
+    task_people.add(task.creator_id)
+    return bool(task_people & visible_ids)
+
+
 @router.get("/iteration/{iteration_id}/board-columns", response_model=list[BoardColumnOut])
 async def list_iteration_board_columns(
     iteration_id: uuid.UUID,
@@ -147,6 +174,17 @@ async def list_tasks(
 ):
     """Список задач итерации с фильтрацией"""
     query = select(Task).options(selectinload(Task.assignees)).where(Task.iteration_id == iteration_id)
+    visible_ids = await _visible_task_user_ids(db, user)
+    if visible_ids is not None:
+        in_visible_assignees = exists().where(
+            TaskAssignee.task_id == Task.id,
+            TaskAssignee.user_id.in_(visible_ids),
+        )
+        query = query.where(or_(
+            Task.creator_id.in_(visible_ids),
+            Task.assignee_id.in_(visible_ids),
+            in_visible_assignees,
+        ))
     if status:
         query = query.where(Task.status == status)
     if priority:
@@ -196,6 +234,9 @@ async def get_task(task_id: uuid.UUID, db: AsyncSession = Depends(get_db), user:
     if not task:
         raise HTTPException(status_code=404, detail="Задача не найдена")
     
+    if not await _can_view_task(db, user, task):
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+
     # Verify project membership via iteration
     if user.role not in ADMIN_ROLES:
         iter_result = await db.execute(select(Iteration).where(Iteration.id == task.iteration_id))
@@ -304,6 +345,10 @@ async def create_task(data: TaskCreate, db: AsyncSession = Depends(get_db), user
         initial_assignee_ids = list(dict.fromkeys(data.assignee_ids))
     elif data.assignee_id:
         initial_assignee_ids = [data.assignee_id]
+
+    visible_ids = await _visible_task_user_ids(db, user)
+    if visible_ids is not None and any(uid not in visible_ids for uid in initial_assignee_ids):
+        raise HTTPException(status_code=403, detail="Можно назначать задачи только в пределах своего отдела")
 
     task = Task(
         iteration_id=data.iteration_id,
@@ -435,6 +480,10 @@ async def submit_task_for_review(
     )
     task = result.scalar_one_or_none()
     if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+
+    if not await _can_view_task(db, user, task):
+        # Не раскрываем существование чужой приватной задачи.
         raise HTTPException(status_code=404, detail="Задача не найдена")
 
     assignee_ids = set(_ordered_assignee_ids_from_task(task))
@@ -690,6 +739,9 @@ async def update_task(task_id: uuid.UUID, data: TaskUpdate, db: AsyncSession = D
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Задача не найдена")
+
+    if not await _can_view_task(db, user, task):
+        raise HTTPException(status_code=404, detail="Задача не найдена")
     
     # Verify project membership via iteration
     if user.role not in ADMIN_ROLES:
@@ -749,6 +801,9 @@ async def update_task(task_id: uuid.UUID, data: TaskUpdate, db: AsyncSession = D
         task.assignee_id = assignee_id_value
 
     if new_assignee_ids_to_sync is not None:
+        visible_ids = await _visible_task_user_ids(db, user)
+        if visible_ids is not None and any(uid not in visible_ids for uid in new_assignee_ids_to_sync):
+            raise HTTPException(status_code=403, detail="Можно назначать задачи только в пределах своего отдела")
         await _sync_task_assignees(db, task.id, new_assignee_ids_to_sync)
         if sorted(old_assignee_ids) != sorted(new_assignee_ids_to_sync):
             hist_uids = set(old_assignee_ids) | set(new_assignee_ids_to_sync)
@@ -875,9 +930,12 @@ async def update_task(task_id: uuid.UUID, data: TaskUpdate, db: AsyncSession = D
 
 @router.delete("/{task_id}")
 async def delete_task(task_id: uuid.UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    result = await db.execute(select(Task).where(Task.id == task_id))
+    result = await db.execute(select(Task).options(selectinload(Task.assignees)).where(Task.id == task_id))
     task = result.scalar_one_or_none()
     if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+
+    if not await _can_view_task(db, user, task):
         raise HTTPException(status_code=404, detail="Задача не найдена")
     
     # Only task creator, project member or admin can delete
@@ -910,9 +968,11 @@ async def delete_task(task_id: uuid.UUID, db: AsyncSession = Depends(get_db), us
 @router.post("/{task_id}/comments", response_model=TaskCommentOut, status_code=201)
 async def add_comment(task_id: uuid.UUID, data: TaskCommentCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     # Verify task exists and user has access
-    task_result = await db.execute(select(Task).where(Task.id == task_id))
+    task_result = await db.execute(select(Task).options(selectinload(Task.assignees)).where(Task.id == task_id))
     task = task_result.scalar_one_or_none()
     if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+    if not await _can_view_task(db, user, task):
         raise HTTPException(status_code=404, detail="Задача не найдена")
     if user.role not in ADMIN_ROLES:
         iter_result = await db.execute(select(Iteration).where(Iteration.id == task.iteration_id))
@@ -944,9 +1004,11 @@ async def upload_task_attachment(
 ):
     """Загрузка файла-вложения к задаче"""
     from app.services.s3 import upload_file_to_s3
-    task_result = await db.execute(select(Task).where(Task.id == task_id))
+    task_result = await db.execute(select(Task).options(selectinload(Task.assignees)).where(Task.id == task_id))
     task = task_result.scalar_one_or_none()
     if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+    if not await _can_view_task(db, user, task):
         raise HTTPException(status_code=404, detail="Задача не найдена")
     if user.role not in ADMIN_ROLES:
         iter_result = await db.execute(select(Iteration).where(Iteration.id == task.iteration_id))

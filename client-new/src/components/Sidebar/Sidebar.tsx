@@ -394,6 +394,8 @@ export default function Sidebar() {
   if (!user) return null;
 
   const navLabel = (key: string) => (lang.nav as Record<string, string>)[key] ?? key;
+  const isLeadership = ['admin', 'owner', 'deputy_owner'].includes(user.role);
+  const isConsultant = user.role === 'consultant';
 
   const isTopActive = (path: string, key: string) => {
     if (key === 'myTasks') return location.pathname === '/projects';
@@ -427,7 +429,11 @@ export default function Sidebar() {
         </div>
 
         <nav className={styles.nav} aria-label={mobileLabels.title}>
-          {topNavItems.map(item => {
+          {topNavItems.filter(item => {
+            if (item.key === 'myCompany') return isLeadership;
+            if (item.key === 'myTasks') return !isConsultant;
+            return true;
+          }).map(item => {
             if (item.key === 'myTasks') {
               return (
                 <NavButton
@@ -466,6 +472,16 @@ export default function Sidebar() {
             );
           })}
 
+          {!isConsultant && (
+            <NavButton
+              path="/kpi"
+              navKey="kpi"
+              active={location.pathname === '/kpi'}
+              onNavigate={() => go('/kpi')}
+              label="Мои KPI"
+            />
+          )}
+
           {(['admin', 'owner', 'deputy_owner', 'consultant'] as const).includes(user.role as 'admin' | 'owner' | 'deputy_owner' | 'consultant') && (
             <button
               type="button"
@@ -481,7 +497,7 @@ export default function Sidebar() {
             </button>
           )}
 
-          <div className={styles.section}>
+          {isLeadership && <div className={styles.section}>
             <div className={styles.sectionHeader}>
               <span className={styles.sectionTitle}>{lang.sidebar.projectsHeading}</span>
               <button
@@ -594,11 +610,11 @@ export default function Sidebar() {
                 )}
               </div>
             )}
-          </div>
+          </div>}
 
-          <div className={styles.navDivider} />
+          {isLeadership && <div className={styles.navDivider} />}
 
-          {secondaryNavItems.map(item => {
+          {isLeadership && secondaryNavItems.map(item => {
             const restrictedSections = ['finance'];
             const isAdmin = ['admin', 'owner', 'deputy_owner'].includes(user.role);
             if (!isAdmin && restrictedSections.includes(item.key) && !(user.section_access || []).includes(item.key)) return null;
@@ -621,7 +637,7 @@ export default function Sidebar() {
           })}
 
           {/* Блок Видеоконференции */}
-          {conferenceActive ? (
+          {isLeadership && (conferenceActive ? (
             <>
               <button
                 type="button"
@@ -664,7 +680,7 @@ export default function Sidebar() {
                 <span className={styles.label}>Создать конференцию</span>
               </button>
             )
-          )}
+          ))}
 
           {(['admin', 'owner', 'deputy_owner'] as const).includes(user.role as 'admin' | 'owner' | 'deputy_owner') && (
             <>

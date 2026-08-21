@@ -143,6 +143,12 @@ class UserKPIOut(BaseModel):
     user_id: uuid.UUID
     user_name: str
     avatar_url: Optional[str] = None
+    role: str = "user"
+    department_id: Optional[str] = None
+    has_occupational_kpi: bool = False
+    general_score: Optional[float] = None
+    occupational_score: Optional[float] = None
+    overall_score: Optional[float] = None
     total_time_minutes: int = 0
     topics_completed: int = 0
     topics_total: int = 0

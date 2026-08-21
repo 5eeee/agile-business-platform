@@ -58,7 +58,7 @@ const KPI_FIELDS: Array<keyof UserKPI> = [
 const ROLE_LABELS: Record<string, string> = {
   owner: 'Владелец',
   deputy_owner: 'Заместитель',
-  admin: 'Администратор',
+  admin: 'Руководитель отдела',
   manager: 'Руководитель',
   employee: 'Сотрудник',
   user: 'Сотрудник',
@@ -78,6 +78,7 @@ const valueColor = (value: number | null | undefined) => {
 
 const overallFor = (item?: UserKPI) => {
   if (!item) return null;
+  if (typeof item.overall_score === 'number' && Number.isFinite(item.overall_score)) return item.overall_score;
   const values = KPI_FIELDS.map(field => item[field]).filter((value): value is number => typeof value === 'number');
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
 };
@@ -248,7 +249,21 @@ export default function OwnerDashboard() {
                   const kpi = kpis[item.id];
                   const overall = overallFor(kpi);
                   const name = displayName(item);
-                  return <tr key={item.id}>
+                  const openProfile = () => navigate(`/kpi?user=${encodeURIComponent(item.id)}`);
+                  return <tr
+                    className={styles.personRow}
+                    key={item.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Открыть KPI сотрудника ${name}`}
+                    onClick={openProfile}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        openProfile();
+                      }
+                    }}
+                  >
                     <td className={styles.personCell}><div className={styles.person}><span className={styles.avatar}>{item.avatar_url ? <img src={item.avatar_url} alt="" /> : name.slice(0, 1).toUpperCase()}</span><span className={styles.personCopy}><strong>{name}</strong><span>{ROLE_LABELS[item.role] || item.role}</span></span></div></td>
                     <td data-label="Сроки"><MetricValue value={kpi?.kpi1_deadlines} /></td>
                     <td data-label="Дисциплина"><MetricValue value={kpi?.kpi2_punctuality} /></td>

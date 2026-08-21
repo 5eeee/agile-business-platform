@@ -85,6 +85,12 @@ export interface UserKPI {
   user_id: string;
   user_name: string;
   avatar_url: string | null;
+  role: 'admin' | 'user' | 'intern' | 'owner' | 'deputy_owner' | 'consultant';
+  department_id: string | null;
+  has_occupational_kpi: boolean;
+  general_score: number | null;
+  occupational_score: number | null;
+  overall_score: number | null;
   total_time_minutes: number;
   topics_completed: number;
   topics_total: number;

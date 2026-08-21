@@ -3,7 +3,7 @@
   display: flex; 
   flex-direction: column; 
   gap: 24px; 
-  max-width: 1200px;
+  max-width: 1320px;
   margin: 0 auto;
   width: 100%;
 }
@@ -14,7 +14,7 @@
   justify-content: space-between; 
   gap: 16px; 
   flex-wrap: wrap; 
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--color-border);
   padding-bottom: 16px;
 }
 
@@ -133,6 +133,223 @@
   border-radius: var(--radius-sm); 
   color: #ef4444; 
 }
+
+.backButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 0;
+  border: 0;
+  color: var(--color-text-secondary);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.backButton:hover { color: var(--color-primary); }
+
+.kpiOverview {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+
+.scoreHero {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(260px, 1.2fr) minmax(280px, .9fr) minmax(190px, .65fr);
+  align-items: center;
+  gap: 24px;
+  padding: 22px;
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 78% 10%, color-mix(in srgb, var(--color-primary) 9%, transparent), transparent 34%),
+    var(--color-surface);
+  box-shadow: 0 12px 34px var(--color-shadow);
+}
+
+.personSummary,
+.scoreBlock {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 14px;
+}
+
+.personAvatar {
+  display: grid;
+  width: 62px;
+  height: 62px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 24%, var(--color-border));
+  border-radius: 18px;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.personAvatar img { width: 100%; height: 100%; object-fit: cover; }
+.eyebrow { color: var(--color-primary); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.personSummary h2 { margin: 4px 0 8px; font-size: 20px; line-height: 1.2; }
+.personMeta { display: flex; flex-wrap: wrap; gap: 7px 12px; }
+.personMeta span { display: inline-flex; align-items: center; gap: 5px; color: var(--color-text-secondary); font-size: 11px; }
+
+.scoreRing {
+  --score-color: var(--color-primary);
+  display: grid;
+  width: 92px;
+  height: 92px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 7px;
+  border-radius: 50%;
+}
+.scoreRing[data-tone='success'] { --score-color: var(--color-success); }
+.scoreRing[data-tone='warning'] { --score-color: var(--color-warning); }
+.scoreRing[data-tone='danger'] { --score-color: var(--color-error); }
+.scoreRing[data-tone='neutral'] { --score-color: var(--color-text-muted); }
+.scoreRing > div {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: baseline;
+  justify-content: center;
+  place-self: center;
+  padding-top: 23px;
+  border-radius: 50%;
+  background: var(--color-surface);
+}
+.scoreRing strong { font-size: 27px; line-height: 1; font-variant-numeric: tabular-nums; }
+.scoreRing span { color: var(--color-text-secondary); font-size: 12px; font-weight: 800; }
+.scoreCopy strong, .scoreCopy span { display: block; }
+.scoreCopy strong { font-size: 14px; }
+.scoreCopy span { max-width: 190px; margin-top: 4px; color: var(--color-text-secondary); font-size: 11px; line-height: 1.4; }
+
+.scoreFacts {
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-border);
+}
+.scoreFacts div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; background: var(--color-bg-secondary); }
+.scoreFacts span { color: var(--color-text-secondary); font-size: 10px; }
+.scoreFacts strong { font-size: 13px; font-variant-numeric: tabular-nums; }
+
+.metricGroup {
+  min-width: 0;
+  overflow: hidden;
+  padding: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: var(--color-surface);
+  box-shadow: 0 7px 24px var(--color-shadow);
+}
+
+.managerMetricGroup {
+  border-color: color-mix(in srgb, var(--color-primary) 24%, var(--color-border));
+  background: linear-gradient(135deg, var(--color-primary-light), transparent 36%), var(--color-surface);
+}
+
+.metricGroupHeader,
+.metricGroupHeader > div {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.metricGroupHeader { justify-content: space-between; margin-bottom: 14px; }
+.metricGroupHeader h3 { margin: 0; font-size: 16px; }
+.metricGroupHeader p { margin: 3px 0 0; color: var(--color-text-secondary); font-size: 10px; }
+.metricGroupHeader > strong { color: var(--color-primary); font-size: 18px; }
+.groupNumber {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.metricStrip {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 8px;
+}
+
+.metricCard {
+  --metric-color: var(--color-primary);
+  display: flex;
+  min-height: 126px;
+  flex-direction: column;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 13px;
+  background: var(--color-bg-secondary);
+}
+.metricCard[data-tone='success'] { --metric-color: var(--color-success); }
+.metricCard[data-tone='warning'] { --metric-color: var(--color-warning); }
+.metricCard[data-tone='danger'] { --metric-color: var(--color-error); }
+.metricCard[data-tone='neutral'] { --metric-color: var(--color-text-muted); }
+.metricTop { display: flex; align-items: center; justify-content: space-between; color: var(--metric-color); }
+.metricTop span { font-size: 9px; font-weight: 850; letter-spacing: .07em; }
+.metricValue strong { display: block; margin-top: 10px; color: var(--metric-color); font-size: 22px; line-height: 1; font-variant-numeric: tabular-nums; }
+.metricName { min-height: 29px; margin-top: 7px; color: var(--color-text-secondary); font-size: 10px; font-weight: 650; line-height: 1.35; }
+.metricBar { display: block; height: 4px; margin-top: auto; overflow: hidden; border-radius: 999px; background: var(--color-bg-tertiary); }
+.metricBar i { display: block; height: 100%; border-radius: inherit; background: var(--metric-color); }
+.metricCard small { margin-top: 5px; color: var(--color-text-muted); font-size: 8px; }
+
+.managerSla {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -2px 0 12px;
+  padding: 9px 11px;
+  border: 1px solid var(--color-border);
+  border-radius: 11px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  font-size: 11px;
+}
+.managerSla svg { color: var(--color-primary); }
+.managerSla strong { margin-left: auto; color: var(--color-text-primary); font-size: 13px; }
+.managerSla small { color: var(--color-text-muted); font-size: 9px; }
+
+.workflowDisclosure {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-surface);
+}
+.workflowDisclosure > summary {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 16px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  list-style: none;
+}
+.workflowDisclosure > summary::-webkit-details-marker { display: none; }
+.workflowDisclosure > summary > svg:first-child { color: var(--color-primary); }
+.workflowDisclosure > summary > span { flex: 1; }
+.workflowDisclosure > summary strong, .workflowDisclosure > summary small { display: block; }
+.workflowDisclosure > summary strong { font-size: 13px; }
+.workflowDisclosure > summary small { margin-top: 3px; color: var(--color-text-secondary); font-size: 10px; }
+.workflowDisclosure > summary > svg:last-child { color: var(--color-text-muted); transition: transform 160ms ease; }
+.workflowDisclosure[open] > summary { border-bottom: 1px solid var(--color-border); }
+.workflowDisclosure[open] > summary > svg:last-child { transform: rotate(180deg); }
+.workflowDisclosure > section { margin: 0; border: 0; border-radius: 0; box-shadow: none; }
 
 /* Regulations Hub */
 .regulationsSection {
@@ -849,5 +1066,36 @@
   background: rgba(59, 130, 246, 0.1);
   color: #60a5fa;
   font-weight: 600;
+}
+
+@media (max-width: 980px) {
+  .scoreHero { grid-template-columns: 1fr 1fr; }
+  .scoreFacts { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .page { gap: 14px; padding: 14px 12px 80px; }
+  .head { align-items: flex-start; padding-bottom: 12px; }
+  .head h1 { font-size: 23px; line-height: 1.15; }
+  .head > button { min-height: 40px; }
+  .scoreHero { grid-template-columns: 1fr; gap: 17px; padding: 15px; border-radius: 16px; }
+  .personAvatar { width: 50px; height: 50px; border-radius: 14px; }
+  .personSummary h2 { font-size: 18px; }
+  .scoreBlock { padding: 12px; border-radius: 13px; background: var(--color-bg-secondary); }
+  .scoreRing { width: 76px; height: 76px; }
+  .scoreRing > div { padding-top: 18px; }
+  .scoreRing strong { font-size: 23px; }
+  .scoreFacts { grid-column: auto; grid-template-columns: 1fr; }
+  .metricGroup { padding: 13px; border-radius: 15px; }
+  .metricGroupHeader { align-items: flex-start; }
+  .metricGroupHeader p { max-width: 225px; }
+  .metricGroupHeader > strong { font-size: 15px; }
+  .metricStrip { display: flex; width: 100%; max-width: 100%; gap: 8px; padding-right: 4px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; }
+  .metricStrip::-webkit-scrollbar { display: none; }
+  .metricCard { width: 142px; min-width: 142px; min-height: 128px; scroll-snap-align: start; }
+  .managerSla { display: grid; grid-template-columns: auto 1fr auto; }
+  .managerSla strong { margin-left: 0; text-align: right; }
+  .managerSla small { grid-column: 2 / -1; }
+  .workflowDisclosure > summary { min-height: 70px; padding: 12px; }
 }
 

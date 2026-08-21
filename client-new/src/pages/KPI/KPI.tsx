@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Activity, Timer, Gauge, Brain, RefreshCcw, Coins,
-  Search, BookOpen, ChevronDown, ChevronUp, AlertCircle, Info, Award, HelpCircle, Briefcase, Sparkles, Filter 
+  Search, BookOpen, ChevronDown, ChevronUp, AlertCircle, Info, Award, HelpCircle, Briefcase, Sparkles, Filter,
+  ArrowLeft, Building2, Clock3, UserRound, ClipboardCheck
 } from 'lucide-react';
 import { 
   gamificationApi, 
@@ -25,7 +27,25 @@ const finiteKpiValue = (value: unknown): number | null => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const ROLE_LABELS: Record<string, string> = {
+  owner: 'Владелец',
+  deputy_owner: 'Заместитель владельца',
+  admin: 'Руководитель отдела',
+  user: 'Штатный сотрудник',
+  intern: 'Стажёр',
+  consultant: 'Консультант',
+};
+
+const valueTone = (value: number | null) => {
+  if (value === null) return 'neutral';
+  if (value >= 90) return 'success';
+  if (value >= 70) return 'warning';
+  return 'danger';
+};
+
 export default function KPIPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAppSelector(s => s.auth);
   const { language } = useAppSelector(s => s.ui);
   const lang = t(language);
@@ -48,6 +68,9 @@ export default function KPIPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [simulating, setSimulating] = useState(false);
+  const targetUserId = searchParams.get('user');
+  const canInspectTeam = Boolean(user && ['admin', 'owner', 'deputy_owner'].includes(user.role));
+  const isViewingOther = Boolean(targetUserId && targetUserId !== user?.id && canInspectTeam);
 
   // Regulations state
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,12 +78,15 @@ export default function KPIPage() {
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
 
   const load = async () => {
+    setLoading(true);
     setError(null);
     try {
-      const { data } = await gamificationApi.getMyKPI();
+      const { data } = isViewingOther && targetUserId
+        ? await gamificationApi.getUserKPI(targetUserId)
+        : await gamificationApi.getMyKPI();
       setKpi(data);
 
-      if (user && ['admin', 'owner', 'deputy_owner'].includes(user.role)) {
+      if (canInspectTeam && !isViewingOther) {
         const [managerResult, departmentResult, reactivityResult] = await Promise.allSettled([
           gamificationApi.getManagerKPIDetails(),
           gamificationApi.getDepartmentKPIHealth(),
@@ -70,6 +96,10 @@ export default function KPIPage() {
         setManagerDetails(managerResult.status === 'fulfilled' ? managerResult.value.data : null);
         setDepartmentHealth(departmentResult.status === 'fulfilled' ? departmentResult.value.data : null);
         setManagerReactivity(reactivityResult.status === 'fulfilled' ? reactivityResult.value.data : null);
+      } else {
+        setManagerDetails(null);
+        setDepartmentHealth(null);
+        setManagerReactivity(null);
       }
     } catch (e: any) {
       setError(e?.response?.data?.detail || 'Не удалось загрузить KPI');
@@ -83,7 +113,7 @@ export default function KPIPage() {
     const id = window.setInterval(load, 60 * 1000);
     return () => window.clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, targetUserId]);
 
   const getIcon = (iconName: string, className?: string) => {
     switch (iconName) {
@@ -205,7 +235,19 @@ export default function KPIPage() {
     ];
   }, [kpi]);
 
-  const liveOverall = useMemo(() => {
+  const occupationalKpis = useMemo(() => {
+    if (!kpi?.has_occupational_kpi) return [];
+    return [
+      { key: 'M1', title: 'Реакция на падения сотрудников', value: finiteKpiValue(kpi.manager_kpi1_reaction_index) },
+      { key: 'M3', title: 'Ответственность руководителя', value: finiteKpiValue(kpi.manager_kpi3_responsibility) },
+      { key: 'M4', title: 'Внимательность руководителя', value: finiteKpiValue(kpi.manager_kpi4_attentiveness) },
+      { key: 'M5', title: 'Работа с инициативами', value: finiteKpiValue(kpi.manager_kpi5_idea_reaction) },
+      { key: 'M6', title: 'Сверхурочная активность', value: finiteKpiValue(kpi.manager_kpi6_overtime) },
+      { key: 'M7', title: 'Контроль показателей отдела', value: finiteKpiValue(kpi.manager_kpi7_department_control) },
+    ];
+  }, [kpi]);
+
+  const calculatedGeneral = useMemo(() => {
     const values = liveEmployeeKpis
       .filter(item => item.key !== 'KPI9')
       .map(item => item.value)
@@ -213,78 +255,135 @@ export default function KPIPage() {
     return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
   }, [liveEmployeeKpis]);
 
+  const generalScore = finiteKpiValue(kpi?.general_score) ?? calculatedGeneral;
+  const occupationalScore = finiteKpiValue(kpi?.occupational_score);
+  const overallScore = finiteKpiValue(kpi?.overall_score) ?? generalScore;
+
   const performanceFactor = useMemo(() => {
-    if (liveOverall === null) return null;
+    if (generalScore === null) return null;
     const critical = [kpi?.kpi1_deadlines, kpi?.kpi2_punctuality, kpi?.kpi5_quality]
       .map(finiteKpiValue)
       .filter((value): value is number => value !== null);
-    if (liveOverall >= 90 && critical.length === 3 && critical.every(value => value >= 90)) return 1.1;
-    if (liveOverall < 70 || critical.some(value => value < 70)) return 0.9;
+    if (generalScore >= 90 && critical.length === 3 && critical.every(value => value >= 90)) return 1.1;
+    if (generalScore < 70 || critical.some(value => value < 70)) return 0.9;
     return 1.0;
-  }, [kpi, liveOverall]);
+  }, [kpi, generalScore]);
 
   return (
     <div className={styles.page}>
       <div className={styles.head}>
         <div>
-          <h1>Показатели эффективности</h1>
-          <p className={styles.muted}>Рабочие показатели, рассчитанные по фактическим событиям платформы.</p>
+          {isViewingOther && (
+            <button className={styles.backButton} type="button" onClick={() => navigate(-1)}>
+              <ArrowLeft size={16} /> Назад к команде
+            </button>
+          )}
+          <h1>{isViewingOther ? `KPI · ${kpi?.user_name || 'Сотрудник'}` : 'Показатели эффективности'}</h1>
+          <p className={styles.muted}>Два уровня оценки: общие рабочие показатели и должностные показатели руководителя.</p>
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={load}><RefreshCcw size={14} /> Обновить</button>
+        <button className="btn btn-ghost btn-sm" onClick={load} disabled={loading}><RefreshCcw size={14} /> Обновить</button>
       </div>
 
       {loading ? <div className={styles.empty}>{lang.common.loading}</div> : null}
       {error ? <div className={styles.error}>{error}</div> : null}
 
       {kpi && (
-        <div className={styles.dashboardSection}>
-          <div className={styles.sectionTitle}>
-            <Gauge size={16} className={styles.primaryText} />
-            <h2>Рабочие показатели — живой расчёт</h2>
+        <section className={styles.kpiOverview}>
+          <div className={styles.scoreHero}>
+            <div className={styles.personSummary}>
+              <span className={styles.personAvatar}>
+                {kpi.avatar_url ? <img src={kpi.avatar_url} alt="" /> : <UserRound size={27} />}
+              </span>
+              <div>
+                <span className={styles.eyebrow}>Карточка эффективности</span>
+                <h2>{kpi.user_name}</h2>
+                <div className={styles.personMeta}>
+                  <span><Briefcase size={13} />{ROLE_LABELS[kpi.role] || kpi.role}</span>
+                  <span><Building2 size={13} />{kpi.department_id || 'Отдел не назначен'}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.scoreBlock}>
+              <div
+                className={styles.scoreRing}
+                data-tone={valueTone(overallScore)}
+                style={{ background: `conic-gradient(var(--score-color) ${Math.max(0, Math.min(overallScore ?? 0, 100))}%, var(--color-bg-tertiary) 0)` }}
+              >
+                <div><strong>{overallScore === null ? '—' : Math.round(overallScore)}</strong><span>{overallScore === null ? '' : '%'}</span></div>
+              </div>
+              <div className={styles.scoreCopy}>
+                <strong>Общая эффективность</strong>
+                <span>{kpi.has_occupational_kpi ? 'Среднее по общим и должностным KPI' : 'Среднее по общим KPI сотрудника'}</span>
+              </div>
+            </div>
+
+            <div className={styles.scoreFacts}>
+              <div><span>Общие KPI</span><strong>{generalScore === null ? '—' : `${Math.round(generalScore)}%`}</strong></div>
+              {kpi.has_occupational_kpi && <div><span>Должностные KPI</span><strong>{occupationalScore === null ? '—' : `${Math.round(occupationalScore)}%`}</strong></div>}
+              <div><span>Коэффициент</span><strong>{performanceFactor === null ? '—' : `×${performanceFactor.toFixed(1)}`}</strong></div>
+            </div>
           </div>
-          <div className={styles.grid}>
+
+          <div className={styles.metricGroup}>
+            <div className={styles.metricGroupHeader}>
+              <div><span className={styles.groupNumber}>01</span><div><h3>Общие KPI</h3><p>Рабочая результативность, дисциплина и качество</p></div></div>
+              <strong>{generalScore === null ? 'Нет данных' : `${Math.round(generalScore)}%`}</strong>
+            </div>
+            <div className={styles.metricStrip}>
             {liveEmployeeKpis.map(item => {
               const value = item.value;
               const carryover = finiteKpiValue(kpi.kpi9_carryover) ?? 0;
-              const tone = value === null ? '#94a3b8' : value >= 90 ? '#10b981' : value >= 70 ? '#f59e0b' : '#ef4444';
               return (
-                <div className={styles.card} key={item.key}>
-                  <Activity size={18} style={{ color: tone }} />
-                  <div>
-                    <strong style={{ color: tone }}>
+                <article className={styles.metricCard} data-tone={valueTone(value)} key={item.key}>
+                  <div className={styles.metricTop}><span>{item.key}</span><Activity size={15} /></div>
+                  <div className={styles.metricValue}>
+                    <strong>
                       {value === null ? '—' : `${Math.round(value)}${item.key === 'KPI9' && carryover > 0 ? '% +' : '%'}`}
                     </strong>
-                    <span>{item.title}</span>
-                    {item.key === 'KPI9' && carryover > 0 && (
-                      <small>+{carryover}% перенесено авансом</small>
-                    )}
                   </div>
-                </div>
+                  <span className={styles.metricName}>{item.title}</span>
+                  <span className={styles.metricBar}><i style={{ width: `${Math.max(0, Math.min(value ?? 0, 100))}%` }} /></span>
+                  {item.key === 'KPI9' && carryover > 0 && <small>+{carryover}% перенос</small>}
+                </article>
               );
             })}
-            <div className={styles.card}>
-              <Award size={18} className={styles.goldText} />
-              <div>
-                <strong>{liveOverall === null ? '—' : `${Math.round(liveOverall)}%`}</strong>
-                <span>Итоговая эффективность</span>
-              </div>
-            </div>
-            <div className={styles.card}>
-              <Gauge size={18} className={styles.primaryText} />
-              <div>
-                <strong>{performanceFactor === null ? '—' : performanceFactor.toFixed(1)}</strong>
-                <span>Коэффициент эффективности</span>
-              </div>
             </div>
           </div>
-        </div>
+
+          {kpi.has_occupational_kpi && (
+            <div className={`${styles.metricGroup} ${styles.managerMetricGroup}`}>
+              <div className={styles.metricGroupHeader}>
+                <div><span className={styles.groupNumber}>02</span><div><h3>Должностные KPI руководителя</h3><p>Управление сотрудниками, инициативами и показателями отдела</p></div></div>
+                <strong>{occupationalScore === null ? 'Нет данных' : `${Math.round(occupationalScore)}%`}</strong>
+              </div>
+              <div className={styles.managerSla}>
+                <Clock3 size={17} /><span>Среднее время реакции</span>
+                <strong>{finiteKpiValue(kpi.manager_kpi2_reaction_days) === null ? '—' : `${finiteKpiValue(kpi.manager_kpi2_reaction_days)?.toFixed(1)} раб. дн.`}</strong>
+                <small>Норма: до 1 рабочего дня</small>
+              </div>
+              <div className={styles.metricStrip}>
+                {occupationalKpis.map(item => (
+                  <article className={styles.metricCard} data-tone={valueTone(item.value)} key={item.key}>
+                    <div className={styles.metricTop}><span>{item.key}</span><Briefcase size={15} /></div>
+                    <div className={styles.metricValue}><strong>{item.value === null ? '—' : `${Math.round(item.value)}%`}</strong></div>
+                    <span className={styles.metricName}>{item.title}</span>
+                    <span className={styles.metricBar}><i style={{ width: `${Math.max(0, Math.min(item.value ?? 0, 100))}%` }} /></span>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
       )}
 
-      <WeeklyReportsPanel
-        canReview={Boolean(user && ['admin', 'owner', 'deputy_owner'].includes(user.role))}
-        onKpiChanged={load}
-      />
-      <IdeasPanel onKpiChanged={load} />
+      {!isViewingOther && (
+        <details className={styles.workflowDisclosure}>
+          <summary><ClipboardCheck size={18} /><span><strong>Еженедельный отчёт и рабочие действия</strong><small>Откройте, чтобы заполнить отчёт или проверить отчёты сотрудников</small></span><ChevronDown size={18} /></summary>
+          <WeeklyReportsPanel canReview={canInspectTeam} onKpiChanged={load} />
+          <IdeasPanel onKpiChanged={load} />
+        </details>
+      )}
 
       {/* KPI Manager Dashboard */}
       {managerDetails && (

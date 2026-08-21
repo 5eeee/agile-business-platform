@@ -526,14 +526,35 @@ async def my_kpi(db: AsyncSession = Depends(get_db), user: User = Depends(get_cu
 
 
 @router.get("/kpi/user/{user_id}", response_model=UserKPIOut)
-async def user_kpi(user_id: uuid.UUID, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)):
+async def user_kpi(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    viewer: User = Depends(get_current_user),
+):
+    """KPI сотрудника с доступом по организационной иерархии.
+
+    Сотрудник видит только себя, руководитель — себя, прямых подчинённых и
+    сотрудников своего отдела, заместитель и владелец — всю организацию.
+    """
+    target = await db.get(User, user_id)
+    if not target:
+        raise HTTPException(404, "Пользователь не найден")
+
+    can_view_all = viewer.role in {UserRole.OWNER, UserRole.DEPUTY_OWNER}
+    is_self = viewer.id == target.id
+    is_direct_report = target.manager_id == viewer.id
+    is_same_department = bool(
+        viewer.role == UserRole.ADMIN
+        and viewer.department_id
+        and target.department_id == viewer.department_id
+    )
+    if not (can_view_all or is_self or is_direct_report or is_same_department):
+        raise HTTPException(403, "KPI доступны только сотруднику и его руководителям")
+
     cache_key = f"kpi_user:{user_id}"
     cached_data = kpi_cache.get(cache_key)
     if cached_data is not None:
         return cached_data
-    target = await db.get(User, user_id)
-    if not target:
-        raise HTTPException(404, "Пользователь не найден")
     res = await _build_kpi(db, target.id, target.name, target.avatar_url)
     kpi_cache.set(cache_key, res, ttl=15)
     return res
@@ -1080,8 +1101,42 @@ async def _build_kpi(db: AsyncSession, user_id: uuid.UUID, name: str, avatar_url
         mgr_k6 = await kpi_calculator.calculate_manager_kpi6_overtime(db, user_id, month_start, month_end)
         mgr_k7 = await kpi_calculator.calculate_manager_kpi7_department_control(db, user_id, month_start, month_end)
 
+    general_values = [k1, k2, k3, k4, k5, k8, k10, customer_satisfaction]
+    general_values = [Decimal(str(value)) for value in general_values if value is not None]
+    general_score = (
+        sum(general_values, Decimal("0")) / Decimal(len(general_values))
+        if general_values else None
+    )
+
+    # KPI2 руководителя — длительность в днях, поэтому он показывается как SLA,
+    # но не смешивается с процентами. Должностной итог состоит из шести
+    # процентных показателей: M1, M3, M4, M5, M6 и M7.
+    occupational_values = [mgr_k1, mgr_k3, mgr_k4, mgr_k5, mgr_k6, mgr_k7]
+    occupational_values = [Decimal(str(value)) for value in occupational_values if value is not None]
+    occupational_score = (
+        sum(occupational_values, Decimal("0")) / Decimal(len(occupational_values))
+        if occupational_values else None
+    )
+    has_occupational_kpi = bool(
+        usr and (
+            usr.role in {UserRole.ADMIN, UserRole.OWNER, UserRole.DEPUTY_OWNER}
+            or subordinates_count > 0
+        )
+    )
+    score_groups = [value for value in [general_score, occupational_score if has_occupational_kpi else None] if value is not None]
+    overall_score = (
+        sum(score_groups, Decimal("0")) / Decimal(len(score_groups))
+        if score_groups else None
+    )
+
     return UserKPIOut(
         user_id=user_id, user_name=name, avatar_url=avatar_url,
+        role=usr.role.value if usr else UserRole.USER.value,
+        department_id=usr.department_id if usr else None,
+        has_occupational_kpi=has_occupational_kpi,
+        general_score=float(general_score.quantize(Decimal("0.1"))) if general_score is not None else None,
+        occupational_score=float(occupational_score.quantize(Decimal("0.1"))) if occupational_score is not None else None,
+        overall_score=float(overall_score.quantize(Decimal("0.1"))) if overall_score is not None else None,
         total_time_minutes=total_time, topics_completed=topics_completed,
         topics_total=topics_total, tests_passed=tests_passed, tests_total=tests_total,
         avg_test_score=avg_test_score, coins_balance=float(balance),
