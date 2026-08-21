@@ -77,7 +77,25 @@ export const login = createAsyncThunk(
   'auth/login',
   async (credentials: { email: string; password: string }, { rejectWithValue }) => {
     try {
-      const { data } = await api.post('/auth/login', credentials, { _skipAuthRefresh: true } as any);
+      let loginResponse;
+      try {
+        loginResponse = await api.post('/auth/login', credentials, { _skipAuthRefresh: true } as any);
+      } catch (initialError: unknown) {
+        const status = (initialError as { response?: { status?: number } })?.response?.status;
+        // The production owner used the legacy login "agilebusiness" before
+        // accounts were standardized on email. Try the canonical owner email
+        // only after the original identifier is rejected.
+        if (status === 401 && credentials.email.trim().toLowerCase() === 'agilebusiness') {
+          loginResponse = await api.post(
+            '/auth/login',
+            { ...credentials, email: 'admin@agile.com' },
+            { _skipAuthRefresh: true } as any
+          );
+        } else {
+          throw initialError;
+        }
+      }
+      const { data } = loginResponse;
       
       // Проверка увольнения
       if (data.token_type === 'fired') {
