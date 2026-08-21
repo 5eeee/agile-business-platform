@@ -97,6 +97,16 @@ function normalizeKpiPayload(payload, profile, managerDetails) {
   return normalized;
 }
 
+function taskUserIds(task) {
+  const ids = [task?.creator_id, task?.assignee_id, ...(Array.isArray(task?.assignee_ids) ? task.assignee_ids : [])];
+  return ids.filter(Boolean).map(String);
+}
+
+function taskIsVisible(task, visibleUserIds) {
+  if (visibleUserIds === null) return true;
+  return taskUserIds(task).some(userId => visibleUserIds.has(userId));
+}
+
 async function readBody(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(Buffer.from(chunk));
@@ -149,8 +159,60 @@ export default async function handler(req, res) {
       : null;
   };
 
+  let viewerCache;
+  let visibleUserIdsCache;
+  const getViewer = async () => {
+    if (viewerCache === undefined) viewerCache = await fetchBackendJson('auth/me');
+    return viewerCache;
+  };
+  const getVisibleUserIds = async () => {
+    if (visibleUserIdsCache !== undefined) return visibleUserIdsCache;
+    const viewer = await getViewer();
+    if (!viewer) return new Set();
+    if (viewer.role === 'owner' || viewer.role === 'deputy_owner') {
+      visibleUserIdsCache = null;
+      return null;
+    }
+    const visible = new Set([String(viewer.id)]);
+    if (viewer.role === 'admin') {
+      const users = await fetchBackendJson('users');
+      for (const employee of Array.isArray(users) ? users : []) {
+        const directReport = String(employee.manager_id || '') === String(viewer.id);
+        const sameDepartment = Boolean(
+          viewer.department_id
+          && employee.department_id === viewer.department_id
+        );
+        if (directReport || sameDepartment) visible.add(String(employee.id));
+      }
+    }
+    visibleUserIdsCache = visible;
+    return visible;
+  };
+
+  const taskIdMatch = rawPath.match(/^tasks\/([0-9a-f-]{36})(?:\/|$)/i);
+
   try {
     const body = ['GET', 'HEAD'].includes(req.method) ? undefined : await readBody(req);
+    const visibleUserIds = rawPath.startsWith('tasks') ? await getVisibleUserIds() : null;
+    const isDirectTaskRead = req.method === 'GET' && /^tasks\/[0-9a-f-]{36}$/i.test(rawPath);
+    if (taskIdMatch && !isDirectTaskRead && !['HEAD', 'OPTIONS'].includes(req.method)) {
+      const existingTask = await fetchBackendJson(`tasks/${taskIdMatch[1]}`);
+      if (!existingTask || !taskIsVisible(existingTask, visibleUserIds)) {
+        return res.status(404).json({ detail: 'Задача не найдена' });
+      }
+    }
+    if (body && ['POST', 'PUT', 'PATCH'].includes(req.method) && /^tasks(?:\/[^/]+)?$/.test(rawPath)) {
+      const contentType = String(req.headers['content-type'] || '');
+      if (contentType.includes('application/json')) {
+        const input = JSON.parse(body.toString('utf8'));
+        const assignedIds = [input.assignee_id, ...(Array.isArray(input.assignee_ids) ? input.assignee_ids : [])]
+          .filter(Boolean)
+          .map(String);
+        if (visibleUserIds !== null && assignedIds.some(userId => !visibleUserIds.has(userId))) {
+          return res.status(403).json({ detail: 'Нельзя назначить задачу сотруднику вне вашей зоны ответственности' });
+        }
+      }
+    }
     const upstream = await fetch(url, { method: req.method, headers, body, redirect: 'manual' });
     res.statusCode = upstream.status;
     upstream.headers.forEach((value, key) => {
@@ -163,6 +225,25 @@ export default async function handler(req, res) {
       : (upstream.headers.get('set-cookie') ? [upstream.headers.get('set-cookie')] : []);
     if (cookies.length) res.setHeader('set-cookie', cookies);
     const upstreamBody = Buffer.from(await upstream.arrayBuffer());
+    const isTaskRead = upstream.ok
+      && req.method === 'GET'
+      && (upstream.headers.get('content-type') || '').includes('application/json')
+      && (
+        rawPath === 'tasks'
+        || /^tasks\/iteration\/[^/]+$/.test(rawPath)
+        || /^tasks\/[0-9a-f-]{36}$/i.test(rawPath)
+      );
+    if (isTaskRead) {
+      const taskPayload = JSON.parse(upstreamBody.toString('utf8'));
+      if (Array.isArray(taskPayload)) {
+        res.setHeader('content-type', 'application/json; charset=utf-8');
+        res.end(JSON.stringify(taskPayload.filter(task => taskIsVisible(task, visibleUserIds))));
+        return;
+      }
+      if (!taskIsVisible(taskPayload, visibleUserIds)) {
+        return res.status(404).json({ detail: 'Задача не найдена' });
+      }
+    }
     const isKpiRead = req.method === 'GET' && (
       rawPath === 'gamification/kpi/me'
       || /^gamification\/kpi\/user\/[^/]+$/.test(rawPath)
