@@ -56,7 +56,7 @@ export default function CustomerReviewPage() {
   return (
     <main className={styles.page}>
       <section className={styles.card}>
-        <div className={styles.brand}><ShieldCheck size={22} /><span>Agile Control Center</span></div>
+        <div className={styles.brand}><ShieldCheck size={22} /><span>AGILE WORKSPACE</span></div>
         {loading && <p className={styles.muted}>Загрузка опроса…</p>}
         {!loading && error && !survey && <div className={styles.error}>{error}</div>}
         {survey && !result && (

@@ -131,7 +131,7 @@ export default function LoginPage() {
       <div className={styles.card}>
         <div className={styles.logo}>
           <span className={styles.logoIcon}>A</span>
-          <h1>Agile Control Center</h1>
+          <h1>AGILE WORKSPACE</h1>
         </div>
 
         {needs2FA ? (

@@ -1,5 +1,9 @@
 const BACKEND_ORIGIN = 'https://app-agile-business-pro.onrender.com';
-const TRUSTED_BACKEND_ORIGIN = 'https://agile-control-center.vercel.app';
+// The current Render instance still has the legacy CORS list. Requests from the
+// browser never reach Render directly: this same-origin Vercel function is the
+// only public hop. Use the backend's existing local trusted origin until the
+// rolling Render release with the production domain is active.
+const TRUSTED_BACKEND_ORIGIN = 'http://localhost:5173';
 
 async function readBody(req) {
   const chunks = [];

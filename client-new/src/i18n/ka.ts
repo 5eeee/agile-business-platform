@@ -126,7 +126,7 @@ const ka = {
   },
   sidebar: {
     projectsHeading: 'პროექტები',
-    workspace: 'Agile Control Center',
+    workspace: 'AGILE WORKSPACE',
     addProject: 'ახალი პროექტი',
     messengerTitle: 'მესენჯერი',
     messengerHint: 'სპრინტის ჩატი — პროექტის მარჯვნივ.',

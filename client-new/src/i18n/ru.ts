@@ -128,7 +128,7 @@ const ru = {
   },
   sidebar: {
     projectsHeading: 'Проекты',
-    workspace: 'Agile Control Center',
+    workspace: 'AGILE WORKSPACE',
     addProject: 'Новый проект',
     messengerTitle: 'Мессенджер',
     messengerHint: 'Чаты спринта — в открытом проекте справа.',

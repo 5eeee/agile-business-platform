@@ -126,7 +126,7 @@ const en = {
   },
   sidebar: {
     projectsHeading: 'Projects',
-    workspace: 'Agile Control Center',
+    workspace: 'AGILE WORKSPACE',
     addProject: 'New project',
     messengerTitle: 'Messenger',
     messengerHint: 'Sprint chat — open a project, panel on the right.',
