@@ -3,7 +3,7 @@ import uuid
 import secrets
 import asyncio
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -13,7 +13,7 @@ from app.models.project import Project
 from app.schemas.user import (
     UserAdminOut, AdminUserUpdate, UserSphereRoleCreate, UserFireRequest
 )
-from app.middleware.auth import require_admin
+from app.middleware.auth import require_admin, require_company_or_admin_access
 from app.api.auth import hash_password
 from app.config import SPHERES, SPHERE_ROLE_TEMPLATES, normalize_sphere_name
 from app.services.telegram import notify_admin, notify_user_approved, notify_user_rejected, notify_user_fired
@@ -40,12 +40,18 @@ def _protect_role_hierarchy(admin: User, target: User, update_data: dict | None 
 
 
 @router.get("/users", response_model=list[UserAdminOut])
-async def list_all_users(db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)):
+async def list_all_users(db: AsyncSession = Depends(get_db), admin: User = Depends(require_company_or_admin_access)):
     """Список всех пользователей (для админки)"""
-    result = await db.execute(
-        select(User).where(User.status != UserStatus.BLOCKED)
-        .options(selectinload(User.sphere_roles)).order_by(User.created_at.desc())
-    )
+    query = select(User).where(User.status != UserStatus.BLOCKED)
+    if admin.role == UserRole.ADMIN:
+        visibility = [User.id == admin.id, User.manager_id == admin.id]
+        if admin.department_id:
+            visibility.append(
+                (User.department_id == admin.department_id)
+                & User.role.notin_([UserRole.OWNER, UserRole.DEPUTY_OWNER])
+            )
+        query = query.where(or_(*visibility))
+    result = await db.execute(query.options(selectinload(User.sphere_roles)).order_by(User.created_at.desc()))
     return [UserAdminOut.model_validate(u) for u in result.scalars().all()]
 
 

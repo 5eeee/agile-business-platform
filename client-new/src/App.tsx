@@ -8,6 +8,7 @@ import LoginPage from './pages/Login/Login';
 import FirePopup from './components/FirePopup/FirePopup';
 import NotificationToast from './components/NotificationToast/NotificationToast';
 import Spinner from './components/Spinner/Spinner';
+import { canAccessSection, type SectionKey } from './utils/access';
 
 const HomePage = lazy(() => import('./pages/Home/Home'));
 const ProjectsPage = lazy(() => import('./pages/Projects/Projects'));
@@ -51,6 +52,18 @@ function ApplicationsGuard({ children }: { children: React.ReactNode }) {
   const allowed = ['admin', 'owner', 'deputy_owner', 'consultant'];
   if (!user || !allowed.includes(user.role)) return <Navigate to="/" />;
   return <>{children}</>;
+}
+
+function SectionRoute({ section, children }: { section: SectionKey; children: React.ReactNode }) {
+  const { user, loading } = useAppSelector(s => s.auth);
+  if (loading) return <Spinner />;
+  return canAccessSection(user, section) ? <>{children}</> : <Navigate to="/" />;
+}
+
+function OwnerRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAppSelector(s => s.auth);
+  if (loading) return <Spinner />;
+  return user?.role === 'owner' ? <>{children}</> : <Navigate to="/" />;
 }
 
 function HomeGuard({ children }: { children: React.ReactNode }) {
@@ -136,21 +149,21 @@ export default function App() {
         <Route path="/review/:token" element={<Suspense fallback={<Spinner />}><CustomerReviewPage /></Suspense>} />
         <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
           <Route index element={<Suspense fallback={<Spinner />}><HomeGuard><HomePage /></HomeGuard></Suspense>} />
-          <Route path="projects" element={<Suspense fallback={<Spinner />}><ProjectsGuard><ProjectsPage /></ProjectsGuard></Suspense>} />
-          <Route path="project/:id" element={<Suspense fallback={<Spinner />}><ProjectsGuard><ProjectDetailPage /></ProjectsGuard></Suspense>} />
-          <Route path="events" element={<Suspense fallback={<Spinner />}><AdminRoute><EventsPage /></AdminRoute></Suspense>} />
+          <Route path="projects" element={<Suspense fallback={<Spinner />}><SectionRoute section="projects"><ProjectsGuard><ProjectsPage /></ProjectsGuard></SectionRoute></Suspense>} />
+          <Route path="project/:id" element={<Suspense fallback={<Spinner />}><SectionRoute section="projects"><ProjectsGuard><ProjectDetailPage /></ProjectsGuard></SectionRoute></Suspense>} />
+          <Route path="events" element={<Suspense fallback={<Spinner />}><SectionRoute section="events"><EventsPage /></SectionRoute></Suspense>} />
           <Route path="places" element={<Suspense fallback={<Spinner />}><AdminRoute><PlacesPage /></AdminRoute></Suspense>} />
           <Route path="music" element={<Suspense fallback={<Spinner />}><AdminRoute><MusicPage /></AdminRoute></Suspense>} />
           <Route path="analytics" element={<Suspense fallback={<Spinner />}><AdminRoute><AnalyticsPage /></AdminRoute></Suspense>} />
-          <Route path="finance" element={<Suspense fallback={<Spinner />}><AdminRoute><FinancePage /></AdminRoute></Suspense>} />
+          <Route path="finance" element={<Suspense fallback={<Spinner />}><OwnerRoute><FinancePage /></OwnerRoute></Suspense>} />
           <Route path="shop" element={<Suspense fallback={<Spinner />}><AdminRoute><ShopPage /></AdminRoute></Suspense>} />
-          <Route path="kpi" element={<Suspense fallback={<Spinner />}><KPIPage /></Suspense>} />
-          <Route path="call" element={<Suspense fallback={<Spinner />}><AdminRoute><CallPage /></AdminRoute></Suspense>} />
-          <Route path="leaderboard" element={<Suspense fallback={<Spinner />}><AdminRoute><LeaderboardPage /></AdminRoute></Suspense>} />
+          <Route path="kpi" element={<Suspense fallback={<Spinner />}><SectionRoute section="kpi"><KPIPage /></SectionRoute></Suspense>} />
+          <Route path="call" element={<Suspense fallback={<Spinner />}><SectionRoute section="call"><CallPage /></SectionRoute></Suspense>} />
+          <Route path="leaderboard" element={<Suspense fallback={<Spinner />}><SectionRoute section="leaderboard"><LeaderboardPage /></SectionRoute></Suspense>} />
           <Route path="profile" element={<Suspense fallback={<Spinner />}><ProfilePage /></Suspense>} />
-          <Route path="applications" element={<Suspense fallback={<Spinner />}><ApplicationsGuard><ApplicationsPage /></ApplicationsGuard></Suspense>} />
-          <Route path="applications/:id" element={<Suspense fallback={<Spinner />}><ApplicationsGuard><ApplicationDetailPage /></ApplicationsGuard></Suspense>} />
-          <Route path="admin" element={<Suspense fallback={<Spinner />}><AdminRoute><AdminPage /></AdminRoute></Suspense>} />
+          <Route path="applications" element={<Suspense fallback={<Spinner />}><SectionRoute section="applications"><ApplicationsGuard><ApplicationsPage /></ApplicationsGuard></SectionRoute></Suspense>} />
+          <Route path="applications/:id" element={<Suspense fallback={<Spinner />}><SectionRoute section="applications"><ApplicationsGuard><ApplicationDetailPage /></ApplicationsGuard></SectionRoute></Suspense>} />
+          <Route path="admin" element={<Suspense fallback={<Spinner />}><SectionRoute section="admin"><AdminRoute><AdminPage /></AdminRoute></SectionRoute></Suspense>} />
         </Route>
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>

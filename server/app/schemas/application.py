@@ -23,6 +23,8 @@ class ApplicationWebhookCreate(BaseModel):
     message: Optional[str] = None
     service: Optional[str] = None
     project_name: Optional[str] = Field(None, max_length=500)
+    source_reference: Optional[str] = Field(None, max_length=120)
+    source_verification_token: Optional[str] = Field(None, max_length=4096)
 
 
 class ApplicationUpdate(BaseModel):
@@ -119,6 +121,7 @@ class ApplicationTaskOut(BaseModel):
 class ApplicationOut(BaseModel):
     id: uuid.UUID
     source: str
+    external_reference: Optional[str] = None
     status: str
     client_name: str
     client_email: Optional[str] = None

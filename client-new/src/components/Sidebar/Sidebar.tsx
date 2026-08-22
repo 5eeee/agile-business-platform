@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Plus, FolderInput, ListTodo, ChevronsLeftRight, MoreHorizontal, Pencil, Trash2, Archive, ChevronDown, FileText, Video, Wallet, RotateCcw, X } from 'lucide-react';
+import { Plus, FolderInput, ListTodo, ChevronsLeftRight, MoreHorizontal, Pencil, Trash2, Archive, ChevronDown, FileText, Video, RotateCcw, X } from 'lucide-react';
 import { useAppSelector, useAppDispatch } from '../../store/hooks';
 import { toggleMobileMenu, toggleSidebarNarrow } from '../../store/slices/uiSlice';
 import { t } from '../../i18n';
 import api from '../../api/client';
 import ConfirmModal from '../ConfirmModal/ConfirmModal';
 import type { Project } from '../../types';
+import { canAccessSection } from '../../utils/access';
 import styles from './Sidebar.module.css';
 
 export const PROJECTS_LIST_CHANGED = 'agile-projects-list-changed';
@@ -70,9 +71,6 @@ const iconMap: Record<string, () => JSX.Element> = {
   profile: UserIcon,
   myProfile: UserIcon,
   myCompany: BuildingIcon,
-  finance: () => (
-    <span className={styles.icon} aria-hidden><Wallet size={18} strokeWidth={1.75} /></span>
-  ),
 };
 
 const topNavItems = [
@@ -84,7 +82,6 @@ const topNavItems = [
 const secondaryNavItems = [
   { path: '/leaderboard', key: 'leaderboard' as const },
   { path: '/events', key: 'events' as const },
-  { path: '/finance', key: 'finance' as const },
 ];
 
 function NavButton({
@@ -430,8 +427,8 @@ export default function Sidebar() {
 
         <nav className={styles.nav} aria-label={mobileLabels.title}>
           {topNavItems.filter(item => {
-            if (item.key === 'myCompany') return isLeadership;
-            if (item.key === 'myTasks') return !isConsultant;
+            if (item.key === 'myCompany') return isLeadership && canAccessSection(user, 'company');
+            if (item.key === 'myTasks') return !isConsultant && canAccessSection(user, 'projects');
             return true;
           }).map(item => {
             if (item.key === 'myTasks') {
@@ -472,7 +469,7 @@ export default function Sidebar() {
             );
           })}
 
-          {!isConsultant && (
+          {!isConsultant && canAccessSection(user, 'kpi') && (
             <NavButton
               path="/kpi"
               navKey="kpi"
@@ -482,7 +479,7 @@ export default function Sidebar() {
             />
           )}
 
-          {(['admin', 'owner', 'deputy_owner', 'consultant'] as const).includes(user.role as 'admin' | 'owner' | 'deputy_owner' | 'consultant') && (
+          {canAccessSection(user, 'applications') && (
             <button
               type="button"
               className={`${styles.navItem} ${location.pathname.startsWith('/applications') ? styles.active : ''}`}
@@ -497,7 +494,7 @@ export default function Sidebar() {
             </button>
           )}
 
-          {isLeadership && <div className={styles.section}>
+          {isLeadership && canAccessSection(user, 'projects') && <div className={styles.section}>
             <div className={styles.sectionHeader}>
               <span className={styles.sectionTitle}>{lang.sidebar.projectsHeading}</span>
               <button
@@ -612,12 +609,10 @@ export default function Sidebar() {
             )}
           </div>}
 
-          {isLeadership && <div className={styles.navDivider} />}
+          {secondaryNavItems.some(item => canAccessSection(user, item.key)) && <div className={styles.navDivider} />}
 
-          {isLeadership && secondaryNavItems.map(item => {
-            const restrictedSections = ['finance'];
-            const isAdmin = ['admin', 'owner', 'deputy_owner'].includes(user.role);
-            if (!isAdmin && restrictedSections.includes(item.key) && !(user.section_access || []).includes(item.key)) return null;
+          {secondaryNavItems.map(item => {
+            if (!canAccessSection(user, item.key)) return null;
 
             const Icon = iconMap[item.key];
             return (
@@ -637,7 +632,7 @@ export default function Sidebar() {
           })}
 
           {/* Блок Видеоконференции */}
-          {isLeadership && (conferenceActive ? (
+          {canAccessSection(user, 'call') && (conferenceActive ? (
             <>
               <button
                 type="button"
@@ -667,7 +662,7 @@ export default function Sidebar() {
               )}
             </>
           ) : (
-            ['admin', 'owner', 'deputy_owner'].includes(user.role) && (
+            isLeadership ? (
               <button
                 type="button"
                 className={styles.navItem}
@@ -679,10 +674,20 @@ export default function Sidebar() {
                 </span>
                 <span className={styles.label}>Создать конференцию</span>
               </button>
+            ) : (
+              <button
+                type="button"
+                className={styles.navItem}
+                onClick={() => go('/call')}
+                title="Расписание конференций"
+              >
+                <span className={styles.icon}><Video /></span>
+                <span className={styles.label}>Конференции</span>
+              </button>
             )
           ))}
 
-          {(['admin', 'owner', 'deputy_owner'] as const).includes(user.role as 'admin' | 'owner' | 'deputy_owner') && (
+          {isLeadership && canAccessSection(user, 'admin') && (
             <>
               <div className={styles.navDivider} />
               <button

@@ -1,8 +1,7 @@
 import { test, expect } from '@playwright/test';
 
-const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL || 'admin@agile.com';
-const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || 'Admin!Agile(Secured';
-const ADMIN_PASSWORD_FALLBACK = 'Admin!Agile(Secured';
+const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL || '';
+const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || '';
 
 const API_BASE = process.env.E2E_API_BASE || 'http://127.0.0.1:8000';
 
@@ -19,19 +18,10 @@ function getCookieValue(setCookieHeaders: string[] | string | undefined, name: s
 }
 
 async function loginAsAdmin(page: import('@playwright/test').Page) {
-  const passwordCandidates = ADMIN_PASSWORD && ADMIN_PASSWORD !== ADMIN_PASSWORD_FALLBACK
-    ? [ADMIN_PASSWORD, ADMIN_PASSWORD_FALLBACK]
-    : [ADMIN_PASSWORD_FALLBACK];
-
-  let loginRes: import('@playwright/test').APIResponse | null = null;
-  for (const pwd of passwordCandidates) {
-    loginRes = await page.request.post(`${API_BASE}/api/auth/login`, {
-      headers: { 'Content-Type': 'application/json' },
-      data: { email: ADMIN_EMAIL, password: pwd },
-    });
-    if (loginRes.ok()) break;
-  }
-  if (!loginRes) throw new Error('loginAsAdmin: no login response');
+  const loginRes = await page.request.post(`${API_BASE}/api/auth/login`, {
+    headers: { 'Content-Type': 'application/json' },
+    data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
+  });
 
   if (!loginRes.ok()) {
     const body = await loginRes.text().catch(() => '');
@@ -74,6 +64,7 @@ async function loginAsAdmin(page: import('@playwright/test').Page) {
 }
 
 test.describe('Admin UI smoke', () => {
+  test.skip(!ADMIN_EMAIL || !ADMIN_PASSWORD, 'Set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD to run admin smoke tests');
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
   });

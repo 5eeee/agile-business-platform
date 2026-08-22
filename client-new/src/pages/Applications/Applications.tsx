@@ -136,7 +136,7 @@ export default function ApplicationsPage() {
 
       <div className={styles.sourceNotice}>
         <span className={styles.sourceIcon}><Link2 size={19} /></span>
-        <div><strong>Автоматический приём заявок</strong><p>Формы с agile-business-pro.com передают имя, контакты, услугу и описание проекта через защищённый webhook.</p></div>
+        <div><strong>Автоматический приём заявок</strong><p>Формы с agile-business-platform.vercel.app передают имя, контакты, услугу и описание проекта через защищённый webhook.</p></div>
         <button type="button" onClick={loadApps} aria-label="Обновить заявки"><RefreshCcw size={16} /> Обновить</button>
       </div>
 

@@ -1,15 +1,24 @@
 import json
 import uuid
 import logging
+import hashlib
+import hmac
+import asyncio
+import base64
+import binascii
+import re
+import time
 from datetime import datetime, date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from sqlalchemy import select, delete, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.config import settings, SPHERES
+from app.rate_limit import limiter
 from app.models.user import User, UserRole
 from app.models.notification import Notification
 from app.models.application import (
@@ -439,6 +448,7 @@ def _to_out(app: Application) -> ApplicationOut:
     return ApplicationOut(
         id=app.id,
         source=app.source,
+        external_reference=app.external_reference,
         status=app.status,
         client_name=app.client_name,
         client_email=app.client_email,
@@ -917,16 +927,81 @@ async def delete_task(
 webhook_router = APIRouter(tags=["Заявки (webhook)"])
 
 WEBHOOK_SECRET = (settings.WEBSITE_WEBHOOK_SECRET or "").strip()
+WEBSITE_PROOF_SEMAPHORE = asyncio.Semaphore(8)
+
+
+def _precheck_website_proof(token: str, source_reference: str) -> None:
+    """Reject malformed attacker input before spending an outbound HTTP request."""
+    if len(token) < 40 or len(token) > 2048 or len(source_reference) > 160:
+        raise HTTPException(status_code=403, detail="Invalid website proof")
+    parts = token.split(".")
+    if len(parts) != 2 or not all(parts):
+        raise HTTPException(status_code=403, detail="Invalid website proof")
+    try:
+        padded = parts[0] + "=" * (-len(parts[0]) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
+    except (UnicodeError, ValueError, binascii.Error, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=403, detail="Invalid website proof") from exc
+    expires_at = claims.get("exp")
+    digest = claims.get("digest")
+    now_ms = int(time.time() * 1000)
+    if not (
+        claims.get("reference") == source_reference
+        and isinstance(digest, str)
+        and re.fullmatch(r"[a-fA-F0-9]{64}", digest)
+        and isinstance(expires_at, (int, float))
+        and now_ms <= expires_at <= now_ms + 10 * 60_000
+    ):
+        raise HTTPException(status_code=403, detail="Invalid website proof")
 
 
 @webhook_router.post("/applications/webhook", status_code=201)
+@limiter.limit("15/minute")
 async def webhook_create_application(
+    request: Request,
     data: ApplicationWebhookCreate,
     db: AsyncSession = Depends(get_db),
     x_webhook_secret: str = Header("", alias="X-Webhook-Secret"),
 ):
-    if not WEBHOOK_SECRET or x_webhook_secret != WEBHOOK_SECRET:
-        raise HTTPException(status_code=403, detail="Invalid webhook secret")
+    shared_secret_valid = bool(
+        WEBHOOK_SECRET
+        and hmac.compare_digest(x_webhook_secret.encode("utf-8"), WEBHOOK_SECRET.encode("utf-8"))
+    )
+    if not shared_secret_valid:
+        token = (data.source_verification_token or "").strip()
+        source_reference_candidate = (data.source_reference or "").strip()
+        if not token or not source_reference_candidate:
+            raise HTTPException(status_code=403, detail="Invalid website proof")
+        _precheck_website_proof(token, source_reference_candidate)
+        try:
+            async with WEBSITE_PROOF_SEMAPHORE:
+                async with httpx.AsyncClient(timeout=5, follow_redirects=False) as client:
+                    proof_response = await client.post(
+                        "https://agile-business-platform.vercel.app/api/platform/verify-lead-token",
+                        json={"token": token},
+                    )
+            proof = proof_response.json() if proof_response.is_success else {}
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("Website proof verification unavailable: %s", exc)
+            raise HTTPException(status_code=503, detail="Website verification unavailable") from exc
+        canonical = "\n".join((source_reference_candidate, (data.email or "").strip().lower(), data.name.strip()))
+        expected_digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        if not (
+            proof.get("ok")
+            and proof.get("reference") == source_reference_candidate
+            and isinstance(proof.get("digest"), str)
+            and hmac.compare_digest(proof["digest"], expected_digest)
+        ):
+            raise HTTPException(status_code=403, detail="Invalid website proof")
+
+    source_reference = (data.source_reference or "").strip() or None
+    if source_reference:
+        existing_result = await db.execute(
+            select(Application.id).where(Application.external_reference == source_reference)
+        )
+        existing_id = existing_result.scalar_one_or_none()
+        if existing_id:
+            return {"id": str(existing_id), "status": "existing"}
 
     # Название проекта: с визитки часто приходит только текст сообщения — подставляем сами
     raw_pn = (data.project_name or "").strip()
@@ -943,6 +1018,7 @@ async def webhook_create_application(
 
     app = Application(
         source=ApplicationSource.WEBSITE,
+        external_reference=source_reference,
         client_name=data.name,
         client_email=data.email,
         client_phone=data.phone,

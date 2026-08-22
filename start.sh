@@ -44,6 +44,7 @@ fi
 # Check/create .env
 if [ ! -f ".env" ]; then
     SECRET=$(head -c 48 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 64)
+    ADMIN_PASSWORD=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
     cat > .env << ENVEOF
 DEBUG=false
 SECRET_KEY=${SECRET}
@@ -55,11 +56,12 @@ MINIO_PASSWORD=minioadmin123
 ELASTIC_PASSWORD=changeme
 CORS_ORIGINS=["http://localhost:3000","http://localhost:5173"]
 ADMIN_SEED_EMAIL=admin@agile.local
-ADMIN_SEED_PASSWORD=admin123
+ADMIN_SEED_PASSWORD=${ADMIN_PASSWORD}
 WORKERS=2
 FRONTEND_PORT=3000
 ENVEOF
     echo "[OK] .env created with local defaults"
+    echo "Initial admin password: ${ADMIN_PASSWORD}"
 fi
 
 echo "Starting with Docker Compose..."

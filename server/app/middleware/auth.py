@@ -94,20 +94,91 @@ async def get_current_user(
 FULL_ACCESS_ROLES = ADMIN_ROLES
 APPLICATIONS_ROLES = {UserRole.ADMIN, UserRole.OWNER, UserRole.DEPUTY_OWNER, UserRole.CONSULTANT}
 
+SECTION_ACCESS_PRESETS: dict[UserRole, set[str]] = {
+    UserRole.OWNER: {
+        "profile", "company", "projects", "kpi", "applications",
+        "leaderboard", "events", "call", "finance", "admin",
+    },
+    UserRole.DEPUTY_OWNER: {
+        "profile", "company", "projects", "kpi", "applications",
+        "leaderboard", "events", "call", "admin",
+    },
+    UserRole.ADMIN: {
+        "profile", "company", "projects", "kpi", "applications",
+        "leaderboard", "events", "call", "admin",
+    },
+    UserRole.CONSULTANT: {"profile", "applications", "call"},
+    UserRole.USER: {"profile", "projects", "kpi", "events", "call"},
+    UserRole.INTERN: {"profile", "projects", "kpi", "call"},
+}
+
+
+def has_section_access(user: User, section: str) -> bool:
+    """Server-side source of truth for the access graph configured by the owner."""
+    if section == "profile":
+        return True
+    if section == "finance":
+        return user.role == UserRole.OWNER
+    if user.role == UserRole.OWNER:
+        return True
+    if isinstance(user.section_access, list):
+        return section in {str(key) for key in user.section_access}
+    return section in SECTION_ACCESS_PRESETS.get(user.role, set())
+
+
+def _require_section(user: User, section: str) -> User:
+    if not has_section_access(user, section):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Раздел отключён настройками доступа")
+    return user
+
+
+def require_projects_access(user: User = Depends(get_current_user)) -> User:
+    return _require_section(user, "projects")
+
+
+def require_kpi_access(user: User = Depends(get_current_user)) -> User:
+    return _require_section(user, "kpi")
+
+
+def require_leaderboard_access(user: User = Depends(get_current_user)) -> User:
+    return _require_section(user, "leaderboard")
+
+
+def require_events_access(user: User = Depends(get_current_user)) -> User:
+    return _require_section(user, "events")
+
+
+def require_call_access(user: User = Depends(get_current_user)) -> User:
+    return _require_section(user, "call")
+
+
+def require_company_access(user: User = Depends(get_current_user)) -> User:
+    if user.role not in FULL_ACCESS_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Панель компании доступна только руководству")
+    return _require_section(user, "company")
+
+
+def require_company_or_admin_access(user: User = Depends(get_current_user)) -> User:
+    if user.role not in FULL_ACCESS_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа к сотрудникам компании")
+    if not (has_section_access(user, "company") or has_section_access(user, "admin")):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Раздел отключён настройками доступа")
+    return user
+
 
 def require_admin(user: User = Depends(get_current_user)) -> User:
     if user.role not in FULL_ACCESS_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Требуются права администратора")
-    return user
+    return _require_section(user, "admin")
 
 
 def require_applications_access(user: User = Depends(get_current_user)) -> User:
     if user.role not in APPLICATIONS_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа к модулю заявок")
-    return user
+    return _require_section(user, "applications")
 
 
 def require_non_consultant(user: User = Depends(get_current_user)) -> User:
     if user.role == UserRole.CONSULTANT:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Консультантам недоступен этот раздел")
-    return user
+    return _require_section(user, "projects")

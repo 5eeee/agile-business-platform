@@ -197,6 +197,23 @@
 .card h2 { margin: 0; font-size: 16px; line-height: 1.3; }
 .cardHeader p { margin: 3px 0 0 27px; color: var(--color-text-secondary); font-size: 11px; }
 
+.ordersCard { overflow: hidden; }
+.orderPipeline { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; border-block: 1px solid var(--color-border-light); background: var(--color-border-light); }
+.orderPipeline div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; background: var(--color-bg-secondary); }
+.orderPipeline span { color: var(--color-text-secondary); font-size: 10px; }
+.orderPipeline strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.orderList { display: grid; }
+.orderList > button { display: grid; width: 100%; grid-template-columns: auto minmax(0, 1fr) auto 18px; align-items: center; gap: 12px; padding: 12px 18px; border: 0; border-bottom: 1px solid var(--color-border-light); color: inherit; background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.orderList > button:last-child { border-bottom: 0; }
+.orderList > button:hover { background: var(--color-surface-hover); }
+.orderSource { padding: 4px 7px; border-radius: 7px; color: var(--color-primary); background: var(--color-primary-light); font-size: 9px; font-weight: 800; }
+.orderName { min-width: 0; }
+.orderName strong, .orderName small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orderName strong { font-size: 12px; }
+.orderName small { margin-top: 2px; color: var(--color-text-muted); font-size: 9px; }
+.orderStatus { padding: 5px 8px; border-radius: 999px; color: var(--color-text-secondary); background: var(--color-bg-secondary); font-size: 9px; text-transform: lowercase; }
+.orderList > button > svg { color: var(--color-text-muted); }
+
 .tableWrap { min-width: 0; overflow-x: auto; border-top: 1px solid var(--color-border-light); }
 .table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .table th {
@@ -366,7 +383,7 @@
   .eyebrow { margin-top: 1px; font-size: 9px; }
   .hero h1 { margin-top: 3px; font-size: 22px; }
   .hero p { margin-top: 4px; font-size: 11px; }
-  .actions { display: grid; max-width: none; grid-template-columns: 1fr 1fr .65fr; gap: 7px; }
+  .actions { display: grid; max-width: none; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
   .actions button { width: 100%; min-width: 0; min-height: 42px; padding-inline: 9px; font-size: 11px; }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .stat { min-height: 90px; grid-template-columns: 34px minmax(0, 1fr); gap: 9px; padding: 12px; border-radius: 13px; }
@@ -381,6 +398,10 @@
   .attentionAction { width: 100%; min-height: 38px; grid-column: auto; justify-self: stretch; border-radius: 9px; background: var(--color-primary-light); }
   .cardHeader { align-items: flex-start; padding: 15px; }
   .cardHeader p { margin-left: 0; font-size: 10px; }
+  .orderPipeline { grid-template-columns: 1fr; }
+  .orderPipeline div { padding: 10px 14px; }
+  .orderList > button { grid-template-columns: auto minmax(0, 1fr) 16px; gap: 9px; padding: 11px 14px; }
+  .orderStatus { display: none; }
   .textButton { min-height: 32px; padding: 0 7px; border-radius: 8px; background: var(--color-primary-light); font-size: 0; }
   .textButton svg { width: 17px; height: 17px; }
   .tableWrap { overflow: visible; border-top: 0; }
@@ -407,7 +428,7 @@
   .ownerAvatar { display: none; }
   .hero h1 { font-size: 20px; }
   .actions { grid-template-columns: 1fr 1fr; }
-  .actions button:last-child { grid-column: 1 / -1; grid-row: 1; }
+  .actions button:last-child { grid-column: 1 / -1; }
   .stat { min-height: 86px; grid-template-columns: 1fr; }
   .statIcon { display: none; }
   .manager { grid-template-columns: 1fr; }

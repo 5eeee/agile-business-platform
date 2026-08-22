@@ -149,7 +149,7 @@ DOCKER_ENV_TEMPLATE = textwrap.dedent("""\
 
     CORS_ORIGINS=["http://localhost:3000","http://localhost:5173"]
     ADMIN_SEED_EMAIL=admin@agile.local
-    ADMIN_SEED_PASSWORD=admin123
+    ADMIN_SEED_PASSWORD={admin_password}
     WORKERS=2
     FRONTEND_PORT=3000
 """)
@@ -166,7 +166,7 @@ SERVER_ENV_TEMPLATE = textwrap.dedent("""\
     S3_SECRET_KEY=minioadmin
     S3_BUCKET=agile-files
     ADMIN_SEED_EMAIL=admin@agile.local
-    ADMIN_SEED_PASSWORD=admin123
+    ADMIN_SEED_PASSWORD={admin_password}
     CORS_ORIGINS=["http://localhost:5173","http://localhost:5174","http://localhost:3000"]
     ELASTICSEARCH_URL=
 """)
@@ -178,10 +178,12 @@ def ensure_env_docker():
         log("   .env already exists -- using it", "green")
         return
     secret = secrets.token_urlsafe(48)
-    content = DOCKER_ENV_TEMPLATE.format(secret=secret)
+    admin_password = secrets.token_urlsafe(24)
+    content = DOCKER_ENV_TEMPLATE.format(secret=secret, admin_password=admin_password)
     with open(env_path, "w", encoding="utf-8") as f:
         f.write(content)
     log("   Created .env with safe local defaults", "green")
+    log(f"   Initial admin password: {admin_password}", "yellow")
 
 
 def ensure_env_local():
@@ -190,10 +192,12 @@ def ensure_env_local():
         log("   server/.env already exists -- using it", "green")
         return
     secret = secrets.token_urlsafe(48)
-    content = SERVER_ENV_TEMPLATE.format(secret=secret)
+    admin_password = secrets.token_urlsafe(24)
+    content = SERVER_ENV_TEMPLATE.format(secret=secret, admin_password=admin_password)
     with open(env_path, "w", encoding="utf-8") as f:
         f.write(content)
     log("   Created server/.env with safe local defaults", "green")
+    log(f"   Initial admin password: {admin_password}", "yellow")
 
 
 # ── Strategy: Docker Compose ──────────────────────────────────
@@ -240,7 +244,7 @@ def start_docker():
     log(f"""
    Frontend:  {DOCKER_URL}
    API docs:  http://localhost:8000/docs  (via container network)
-   Admin:     admin@agile.local / admin123
+   Admin:     admin@agile.local / password printed when .env was created
     """, "bold")
 
     open_browser(DOCKER_URL)

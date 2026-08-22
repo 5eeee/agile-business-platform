@@ -21,11 +21,11 @@ from app.schemas.task import (
     BacklogItemCreate, BacklogItemOut, BacklogToTask, TaskKPIReview,
 )
 from app.schemas.board_column import BoardColumnCreate, BoardColumnOut
-from app.middleware.auth import get_current_user
+from app.middleware.auth import get_current_user, require_projects_access
 from app.dependencies import get_project_member, get_project_member_by_iteration
 from app.config import TASK_STATUSES, TASK_PRIORITIES
 
-router = APIRouter(prefix="/tasks", tags=["Задачи"])
+router = APIRouter(prefix="/tasks", tags=["Задачи"], dependencies=[Depends(require_projects_access)])
 
 
 RETURN_REASON_CONFIG = {
@@ -1035,7 +1035,7 @@ async def upload_task_attachment(
 
 # --- Бэклог ---
 
-backlog_router = APIRouter(prefix="/backlog", tags=["Бэклог"])
+backlog_router = APIRouter(prefix="/backlog", tags=["Бэклог"], dependencies=[Depends(require_projects_access)])
 
 
 @backlog_router.get("/{project_id}", response_model=list[BacklogItemOut])

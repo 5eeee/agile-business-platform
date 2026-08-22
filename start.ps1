@@ -52,6 +52,7 @@ if (-not $dockerCmd) {
 if (-not (Test-Path ".env")) {
     Write-Host "Creating .env with local defaults..." -ForegroundColor Yellow
     $secret = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 48 | ForEach-Object { [char]$_ })
+    $adminPassword = [guid]::NewGuid().ToString("N")
     @"
 DEBUG=false
 SECRET_KEY=$secret
@@ -63,11 +64,12 @@ MINIO_PASSWORD=minioadmin123
 ELASTIC_PASSWORD=changeme
 CORS_ORIGINS=["http://localhost:3000","http://localhost:5173"]
 ADMIN_SEED_EMAIL=admin@agile.local
-ADMIN_SEED_PASSWORD=admin123
+ADMIN_SEED_PASSWORD=$adminPassword
 WORKERS=2
 FRONTEND_PORT=3000
 "@ | Set-Content ".env" -Encoding UTF8
     Write-Host "[OK] .env created" -ForegroundColor Green
+    Write-Host "Initial admin password: $adminPassword" -ForegroundColor Yellow
 }
 
 Write-Host "Starting with Docker Compose..." -ForegroundColor Cyan

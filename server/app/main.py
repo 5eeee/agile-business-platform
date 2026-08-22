@@ -28,6 +28,8 @@ from app.api import telegram as telegram_api
 from app.api import gamification as gamification_api
 from app.api import customer_satisfaction
 from app.api import applications as applications_api
+from app.api import finance as finance_api
+from app.api import conferences as conferences_api
 from app.websocket import manager
 from app.middleware.auth import decode_token
 from app.middleware.csrf import CSRFMiddleware
@@ -248,6 +250,8 @@ app.include_router(customer_satisfaction.router, prefix="/api")
 app.include_router(customer_satisfaction.public_router, prefix="/api")
 app.include_router(applications_api.router, prefix="/api")
 app.include_router(applications_api.webhook_router, prefix="/api")
+app.include_router(finance_api.router, prefix="/api")
+app.include_router(conferences_api.router, prefix="/api")
 
 
 # WebSocket для чата

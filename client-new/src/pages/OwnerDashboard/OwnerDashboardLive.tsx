@@ -6,12 +6,14 @@ import {
   Bell,
   BriefcaseBusiness,
   CheckCircle2,
+  ClipboardList,
   FolderKanban,
   Gauge,
   RefreshCcw,
   ShieldCheck,
   TrendingDown,
   Users,
+  WalletCards,
 } from 'lucide-react';
 import api from '../../api/client';
 import { gamificationApi, type ManagerReactivity, type UserKPI } from '../../api/gamification';
@@ -28,11 +30,13 @@ interface AdminUser {
   avatar_url?: string | null;
 }
 
-interface ProjectRow {
+interface ApplicationRow {
   id: string;
-  name?: string;
-  title?: string;
-  status?: string;
+  client_name: string;
+  project_name?: string | null;
+  source: string;
+  status: string;
+  created_at: string;
 }
 
 interface Notice {
@@ -106,7 +110,7 @@ export default function OwnerDashboard() {
   const navigate = useNavigate();
   const owner = useAppSelector(state => state.auth.user);
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [applications, setApplications] = useState<ApplicationRow[]>([]);
   const [kpis, setKpis] = useState<Record<string, UserKPI>>({});
   const [managers, setManagers] = useState<ManagerReactivity[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
@@ -117,17 +121,21 @@ export default function OwnerDashboard() {
     setLoading(true);
     setError('');
     try {
-      const [usersResponse, projectsResponse, managersResponse, noticesResponse] = await Promise.all([
+      const [usersResponse, applicationsResponse, managersResponse, noticesResponse] = await Promise.allSettled([
         api.get<AdminUser[]>('/admin/users'),
-        api.get<ProjectRow[]>('/projects'),
+        api.get<ApplicationRow[]>('/applications'),
         gamificationApi.getManagerReactivity(),
         api.get<Notice[]>('/notifications?limit=12'),
       ]);
-      const activeUsers = usersResponse.data.filter(item => item.status === 'active');
-      setUsers(usersResponse.data);
-      setProjects(projectsResponse.data);
-      setManagers(managersResponse.data);
-      setNotices(noticesResponse.data);
+      const loadedUsers = usersResponse.status === 'fulfilled' ? usersResponse.value.data : [];
+      const activeUsers = loadedUsers.filter(item => item.status === 'active');
+      setUsers(loadedUsers);
+      setApplications(applicationsResponse.status === 'fulfilled' ? applicationsResponse.value.data : []);
+      setManagers(managersResponse.status === 'fulfilled' ? managersResponse.value.data : []);
+      setNotices(noticesResponse.status === 'fulfilled' ? noticesResponse.value.data : []);
+      if (usersResponse.status === 'rejected') {
+        throw usersResponse.reason;
+      }
 
       const results = await Promise.allSettled(activeUsers.map(item => gamificationApi.getUserKPI(item.id)));
       const next: Record<string, UserKPI> = {};
@@ -166,7 +174,15 @@ export default function OwnerDashboard() {
     return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
   }, [employeeRows, kpis]);
 
-  const activeProjects = useMemo(() => projects.filter(project => project.status === 'active').length, [projects]);
+  const orderCounts = useMemo(() => ({
+    total: applications.length,
+    queue: applications.filter(item => ['new', 'contacting', 'tz_received', 'review', 'revision', 'approved'].includes(item.status)).length,
+    inDevelopment: applications.filter(item => item.status === 'distributing').length,
+    completed: applications.filter(item => item.status === 'completed').length,
+  }), [applications]);
+  const recentOrders = useMemo(() => [...applications]
+    .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
+    .slice(0, 5), [applications]);
   const unreadNotices = useMemo(() => notices.filter(item => !item.is_read).length, [notices]);
   const atRiskEmployees = useMemo(() => employeeRows.filter(item => {
     const overall = overallFor(kpis[item.id]);
@@ -199,6 +215,8 @@ export default function OwnerDashboard() {
             <RefreshCcw className={loading ? styles.spinning : ''} size={16} />{loading ? 'Обновляем' : 'Обновить'}
           </button>
           <button className="btn btn-outline" onClick={() => navigate('/admin')}><Users size={16} /> Команда</button>
+          <button className="btn btn-outline" onClick={() => navigate('/applications')}><ClipboardList size={16} /> Заказы</button>
+          <button className="btn btn-outline" onClick={() => navigate('/finance')}><WalletCards size={16} /> Финансы</button>
           <button className="btn btn-primary" onClick={() => navigate('/kpi')}><Gauge size={16} /> KPI</button>
         </nav>
       </header>
@@ -206,14 +224,14 @@ export default function OwnerDashboard() {
       {error && <div className={styles.error} role="alert"><AlertTriangle size={18} /><span>{error}</span><button type="button" onClick={load}>Повторить</button></div>}
 
       <section className={styles.stats} aria-label="Ключевые показатели">
-        <button className={styles.stat} data-tone="blue" onClick={() => navigate('/admin')}>
-          <span className={styles.statIcon}><Users size={20} /></span><span className={styles.statCopy}><strong>{activeUsers.length}</strong><span>активных пользователей</span></span><ArrowRight className={styles.statArrow} size={17} />
+        <button className={styles.stat} data-tone="blue" onClick={() => navigate('/applications')}>
+          <span className={styles.statIcon}><ClipboardList size={20} /></span><span className={styles.statCopy}><strong>{orderCounts.total}</strong><span>всего заказов</span></span><ArrowRight className={styles.statArrow} size={17} />
         </button>
-        <button className={styles.stat} data-tone="violet" onClick={() => navigate('/projects')}>
-          <span className={styles.statIcon}><FolderKanban size={20} /></span><span className={styles.statCopy}><strong>{activeProjects}<small> / {projects.length}</small></strong><span>активных проектов</span></span><ArrowRight className={styles.statArrow} size={17} />
+        <button className={styles.stat} data-tone="violet" onClick={() => navigate('/applications')}>
+          <span className={styles.statIcon}><FolderKanban size={20} /></span><span className={styles.statCopy}><strong>{orderCounts.inDevelopment}</strong><span>заказов в разработке</span></span><ArrowRight className={styles.statArrow} size={17} />
         </button>
-        <button className={styles.stat} data-tone="amber" onClick={() => navigate('/kpi')}>
-          <span className={styles.statIcon}><BriefcaseBusiness size={20} /></span><span className={styles.statCopy}><strong>{managers.length}</strong><span>руководителей в контуре</span></span><ArrowRight className={styles.statArrow} size={17} />
+        <button className={styles.stat} data-tone="amber" onClick={() => navigate('/applications')}>
+          <span className={styles.statIcon}><BriefcaseBusiness size={20} /></span><span className={styles.statCopy}><strong>{orderCounts.queue}</strong><span>заказов в очереди</span></span><ArrowRight className={styles.statArrow} size={17} />
         </button>
         <button className={styles.stat} data-tone="green" onClick={() => navigate('/kpi')}>
           <span className={styles.statIcon}><Gauge size={20} /></span><span className={styles.statCopy}><strong style={{ color: valueColor(averages) }}>{valueText(averages)}</strong><span>средний KPI команды</span></span><ArrowRight className={styles.statArrow} size={17} />
@@ -233,6 +251,27 @@ export default function OwnerDashboard() {
         <button className={styles.attentionAction} onClick={() => navigate('/kpi')}>
           {(atRiskEmployees.length || managerDrops) ? 'Перейти к разбору' : 'Открыть KPI'} <ArrowRight size={16} />
         </button>
+      </section>
+
+      <section className={`${styles.card} ${styles.ordersCard}`}>
+        <div className={styles.cardHeader}>
+          <div><div className={styles.cardTitle}><ClipboardList size={19} /><h2>Заказы компании</h2></div><p>Будущие, текущие и завершённые заказы из заявок сайта.</p></div>
+          <button className={styles.textButton} onClick={() => navigate('/applications')}>Открыть все заказы <ArrowRight size={15} /></button>
+        </div>
+        <div className={styles.orderPipeline}>
+          <div><span>Будущие и очередь</span><strong>{orderCounts.queue}</strong></div>
+          <div><span>В разработке</span><strong>{orderCounts.inDevelopment}</strong></div>
+          <div><span>Завершено</span><strong>{orderCounts.completed}</strong></div>
+        </div>
+        <div className={styles.orderList}>
+          {recentOrders.map(order => <button type="button" key={order.id} onClick={() => navigate(`/applications/${encodeURIComponent(order.id)}`)}>
+            <span className={styles.orderSource}>{order.source === 'website' ? 'Сайт' : 'Вручную'}</span>
+            <span className={styles.orderName}><strong>{order.project_name || order.client_name}</strong><small>{order.client_name}</small></span>
+            <span className={styles.orderStatus}>{order.status}</span>
+            <ArrowRight size={15} />
+          </button>)}
+          {!loading && recentOrders.length === 0 && <div className={styles.empty}>Заказов пока нет. Новая заявка с сайта появится здесь автоматически.</div>}
+        </div>
       </section>
 
       <section className={styles.contentGrid}>

@@ -294,7 +294,19 @@
   padding: 12px;
   border: 1px solid var(--color-border);
   border-radius: 13px;
+  color: inherit;
   background: var(--color-bg-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+.metricCard:hover,
+.metricCard:focus-visible {
+  border-color: color-mix(in srgb, var(--metric-color) 48%, var(--color-border));
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--metric-color) 10%, transparent);
+  transform: translateY(-2px);
+  outline: none;
 }
 .metricCard[data-tone='success'] { --metric-color: var(--color-success); }
 .metricCard[data-tone='warning'] { --metric-color: var(--color-warning); }
@@ -307,6 +319,7 @@
 .metricBar { display: block; height: 4px; margin-top: auto; overflow: hidden; border-radius: 999px; background: var(--color-bg-tertiary); }
 .metricBar i { display: block; height: 100%; border-radius: inherit; background: var(--metric-color); }
 .metricCard small { margin-top: 5px; color: var(--color-text-muted); font-size: 8px; }
+.metricOpen { display: inline-flex; align-items: center; gap: 2px; margin-top: 8px; color: var(--metric-color); font-size: 9px; font-weight: 750; }
 
 .managerSla {
   display: flex;
@@ -318,8 +331,14 @@
   border-radius: 11px;
   color: var(--color-text-secondary);
   background: var(--color-surface);
+  width: 100%;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
   font-size: 11px;
 }
+.managerSla:hover,
+.managerSla:focus-visible { border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border)); outline: none; }
 .managerSla svg { color: var(--color-primary); }
 .managerSla strong { margin-left: auto; color: var(--color-text-primary); font-size: 13px; }
 .managerSla small { color: var(--color-text-muted); font-size: 9px; }
@@ -350,6 +369,97 @@
 .workflowDisclosure[open] > summary { border-bottom: 1px solid var(--color-border); }
 .workflowDisclosure[open] > summary > svg:last-child { transform: rotate(180deg); }
 .workflowDisclosure > section { margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+
+.detailOverlay {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(12, 18, 28, .44);
+  backdrop-filter: blur(5px);
+}
+
+.detailDrawer {
+  display: flex;
+  width: min(620px, 100%);
+  height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-bg);
+  box-shadow: -22px 0 60px rgba(15, 23, 42, .2);
+  animation: detailDrawerIn 180ms ease-out;
+}
+
+@keyframes detailDrawerIn { from { opacity: .7; transform: translateX(32px); } }
+
+.detailHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid var(--color-border);
+  background: radial-gradient(circle at 90% 0%, color-mix(in srgb, var(--color-primary) 11%, transparent), transparent 38%), var(--color-surface);
+}
+.detailHeader h2 { margin: 4px 0 5px; font-size: 24px; line-height: 1.15; }
+.detailHeader p { margin: 0; color: var(--color-text-secondary); font-size: 12px; }
+.detailClose { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border: 1px solid var(--color-border); border-radius: 11px; color: var(--color-text-secondary); background: var(--color-bg-secondary); cursor: pointer; }
+.detailClose:hover { color: var(--color-primary); border-color: color-mix(in srgb, var(--color-primary) 38%, var(--color-border)); }
+
+.detailLoading,
+.detailError { display: flex; align-items: center; gap: 12px; margin: 24px; padding: 18px; border: 1px solid var(--color-border); border-radius: 15px; background: var(--color-surface); }
+.detailLoading span { width: 22px; height: 22px; border: 2px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; animation: detailSpin 800ms linear infinite; }
+@keyframes detailSpin { to { transform: rotate(360deg); } }
+.detailError { border-color: color-mix(in srgb, var(--color-error) 35%, var(--color-border)); color: var(--color-error); }
+.detailError div { display: grid; gap: 3px; }
+.detailError span { color: var(--color-text-secondary); font-size: 12px; }
+
+.detailSummary { display: grid; grid-template-columns: 124px 1fr; gap: 14px; padding: 18px 24px; border-bottom: 1px solid var(--color-border); }
+.detailScore { --detail-color: var(--color-primary); display: grid; min-height: 110px; place-content: center; border: 1px solid color-mix(in srgb, var(--detail-color) 28%, var(--color-border)); border-radius: 18px; text-align: center; background: color-mix(in srgb, var(--detail-color) 7%, var(--color-surface)); }
+.detailScore[data-tone='success'] { --detail-color: var(--color-success); }
+.detailScore[data-tone='warning'] { --detail-color: var(--color-warning); }
+.detailScore[data-tone='danger'] { --detail-color: var(--color-error); }
+.detailScore[data-tone='neutral'] { --detail-color: var(--color-text-muted); }
+.detailScore strong { color: var(--detail-color); font-size: 34px; line-height: 1; font-variant-numeric: tabular-nums; }
+.detailScore span { margin-top: 6px; color: var(--color-text-secondary); font-size: 10px; font-weight: 750; }
+.detailFormula { display: flex; flex-direction: column; justify-content: center; padding: 4px 0; }
+.detailFormula > span { color: var(--color-text-muted); font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.detailFormula strong { margin-top: 7px; font-size: 13px; line-height: 1.5; }
+.detailFormula small { display: inline-flex; align-items: center; gap: 5px; margin-top: 12px; color: var(--color-text-secondary); font-size: 10px; }
+
+.detailTimelineHeader { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 18px 24px 12px; }
+.detailTimelineHeader h3 { margin: 0; font-size: 16px; }
+.detailTimelineHeader p { margin: 3px 0 0; color: var(--color-text-secondary); font-size: 10px; }
+.detailTimelineHeader > span { display: grid; min-width: 34px; height: 34px; place-items: center; border-radius: 10px; color: var(--color-primary); background: var(--color-primary-light); font-size: 12px; font-weight: 800; }
+.detailTimeline { flex: 1; min-height: 0; overflow-y: auto; padding: 0 24px 28px; }
+.detailEvent { position: relative; display: grid; grid-template-columns: 18px 1fr; gap: 10px; padding: 10px 0 12px; }
+.detailEvent::before { position: absolute; top: 28px; bottom: -9px; left: 8px; width: 1px; background: var(--color-border); content: ''; }
+.detailEvent:last-child::before { display: none; }
+.detailEventDot { position: relative; z-index: 1; width: 9px; height: 9px; margin: 7px 0 0 4px; border: 2px solid var(--color-surface); border-radius: 50%; background: var(--color-primary); box-shadow: 0 0 0 2px var(--color-primary-light); }
+.detailEvent[data-status='error'] .detailEventDot,
+.detailEvent[data-status='violation'] .detailEventDot,
+.detailEvent[data-status='negative'] .detailEventDot,
+.detailEvent[data-status='overdue'] .detailEventDot { background: var(--color-error); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-error) 15%, transparent); }
+.detailEvent[data-status='success'] .detailEventDot,
+.detailEvent[data-status='positive'] .detailEventDot,
+.detailEvent[data-status='confirmed'] .detailEventDot,
+.detailEvent[data-status='ok'] .detailEventDot,
+.detailEvent[data-status='in_time'] .detailEventDot { background: var(--color-success); box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-success) 15%, transparent); }
+.detailEventBody { min-width: 0; padding: 13px 14px; border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-surface); }
+.detailEventTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.detailEventTop > div { min-width: 0; }
+.detailEventTop strong { display: block; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.detailEventTop time { display: block; margin-top: 3px; color: var(--color-text-muted); font-size: 9px; }
+.detailEventTop > span { flex: 0 0 auto; padding: 4px 7px; border-radius: 8px; color: var(--color-primary); background: var(--color-primary-light); font-size: 10px; font-weight: 800; }
+.detailEventBody > p { margin: 10px 0 0; color: var(--color-text-secondary); font-size: 11px; line-height: 1.5; }
+.detailEventMeta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+.detailEventMeta span { padding: 3px 6px; border-radius: 6px; color: var(--color-text-muted); background: var(--color-bg-secondary); font-size: 8px; text-transform: lowercase; }
+.detailEmpty { display: grid; min-height: 210px; place-content: center; justify-items: center; gap: 6px; color: var(--color-text-secondary); text-align: center; }
+.detailEmpty svg { color: var(--color-primary); }
+.detailEmpty strong { color: var(--color-text-primary); font-size: 13px; }
+.detailEmpty span { max-width: 280px; font-size: 10px; }
 
 /* Regulations Hub */
 .regulationsSection {
@@ -1097,5 +1207,17 @@
   .managerSla strong { margin-left: 0; text-align: right; }
   .managerSla small { grid-column: 2 / -1; }
   .workflowDisclosure > summary { min-height: 70px; padding: 12px; }
+  .detailDrawer { width: 100%; border-left: 0; }
+  .detailHeader { padding: 17px 16px 14px; }
+  .detailHeader h2 { font-size: 20px; }
+  .detailSummary { grid-template-columns: 96px 1fr; padding: 14px 16px; }
+  .detailScore { min-height: 96px; border-radius: 15px; }
+  .detailScore strong { font-size: 29px; }
+  .detailFormula strong { font-size: 11px; }
+  .detailTimelineHeader { padding: 15px 16px 10px; }
+  .detailTimeline { padding: 0 16px 22px; }
+  .detailEventBody { padding: 12px; }
+  .detailEventTop { gap: 8px; }
+  .detailEventTop strong { max-width: 210px; }
 }
 

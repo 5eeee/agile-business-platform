@@ -31,6 +31,7 @@ class Application(Base):
         SAEnum(ApplicationSource, values_callable=lambda e: [m.value for m in e]),
         default=ApplicationSource.MANUAL, nullable=False,
     )
+    external_reference: Mapped[str | None] = mapped_column(String(120), nullable=True, unique=True, index=True)
     status: Mapped[ApplicationStatus] = mapped_column(
         SAEnum(ApplicationStatus, values_callable=lambda e: [m.value for m in e]),
         default=ApplicationStatus.NEW, nullable=False,

@@ -1,11 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, BarChart3, CheckCircle2, Clock3, Coins, Crown, RefreshCcw, UserRound } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { BarChart3, BriefcaseBusiness, Crown, Gauge, RefreshCcw, UserRound } from 'lucide-react';
 import { gamificationApi, type LeaderboardEntry } from '../../api/gamification';
 import { useAppSelector } from '../../store/hooks';
 import { t } from '../../i18n';
 import styles from './Leaderboard.module.css';
 
+const ROLE_LABELS: Record<string, string> = {
+  owner: 'Владелец',
+  deputy_owner: 'Заместитель владельца',
+  admin: 'Руководитель отдела',
+  user: 'Штатный сотрудник',
+  intern: 'Стажёр',
+  consultant: 'Консультант',
+};
+
+const score = (value: number | null | undefined) => Number.isFinite(value) ? `${Math.round(value as number)}%` : '—';
+
 export default function LeaderboardPage() {
+  const navigate = useNavigate();
   const { language } = useAppSelector(s => s.ui);
   const lang = t(language);
   const [rows, setRows] = useState<LeaderboardEntry[]>([]);
@@ -14,11 +27,12 @@ export default function LeaderboardPage() {
 
   const load = async () => {
     setError(null);
+    setLoading(true);
     try {
       const { data } = await gamificationApi.getLeaderboard();
       setRows(data);
-    } catch (e: any) {
-      setError(e?.response?.data?.detail || 'Не удалось загрузить лидерборд');
+    } catch (requestError: any) {
+      setError(requestError?.response?.data?.detail || 'Не удалось загрузить рейтинг KPI');
     } finally {
       setLoading(false);
     }
@@ -31,7 +45,7 @@ export default function LeaderboardPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const top3 = useMemo(() => rows.slice(0, 3), [rows]);
+  const top3 = useMemo(() => rows.filter(row => row.overall_score !== null).slice(0, 3), [rows]);
 
   return (
     <div className={styles.page}>
@@ -40,24 +54,24 @@ export default function LeaderboardPage() {
           <span className={styles.headIcon}><BarChart3 size={22} aria-hidden /></span>
           <div>
             <span className={styles.eyebrow}>Результаты команды</span>
-            <h1>{lang.nav.leaderboard || 'Лидерборд'}</h1>
-            <p className={styles.muted}>Единый рейтинг по выполненным задачам, дисциплине и Agile.Coins.</p>
+            <h1>{lang.nav.leaderboard || 'Лидерборд KPI'}</h1>
+            <p className={styles.muted}>Место определяется только итоговой эффективностью. Монеты и игровая активность на рейтинг не влияют.</p>
           </div>
         </div>
-        <button className={styles.refreshButton} onClick={load} disabled={loading}><RefreshCcw size={16} className={loading ? styles.refreshing : ''} /> Обновить данные</button>
+        <button className={styles.refreshButton} onClick={load} disabled={loading}><RefreshCcw size={16} className={loading ? styles.refreshing : ''} /> Обновить KPI</button>
       </div>
 
       {top3.length > 0 && (
         <div className={styles.top3}>
-          {top3.map(u => (
-            <div key={u.user_id} className={`${styles.topCard} ${styles[`rank${Math.min(u.rank, 3)}`] || ''}`}>
+          {top3.map(person => (
+            <button type="button" key={person.user_id} className={`${styles.topCard} ${styles[`rank${Math.min(person.rank, 3)}`] || ''}`} onClick={() => navigate(`/kpi?user=${encodeURIComponent(person.user_id)}`)}>
               <div className={styles.topCardHead}>
-                <div className={styles.avatarWrap}>{u.avatar_url ? <img src={u.avatar_url} alt="" /> : <UserRound size={22} />}</div>
-                <div className={styles.rank}><Crown size={16} /> Место #{u.rank}</div>
+                <div className={styles.avatarWrap}>{person.avatar_url ? <img src={person.avatar_url} alt="" /> : <UserRound size={22} />}</div>
+                <div className={styles.rank}><Crown size={16} /> Место #{person.rank}</div>
               </div>
-              <div className={styles.name}>{u.user_name}</div>
-              <div className={styles.meta}><span><Coins size={14} /> {u.coins_balance}</span><span><CheckCircle2 size={14} /> {u.tasks_completed_week} за неделю</span></div>
-            </div>
+              <div className={styles.name}>{person.user_name}</div>
+              <div className={styles.meta}><span><Gauge size={14} /> Итог {score(person.overall_score)}</span><span><BriefcaseBusiness size={14} /> {ROLE_LABELS[person.role] || person.role}</span></div>
+            </button>
           ))}
         </div>
       )}
@@ -72,41 +86,31 @@ export default function LeaderboardPage() {
               <tr>
                 <th>#</th>
                 <th>Сотрудник</th>
-                <th title="Agile.Coins"><Coins size={14} /></th>
-                <th title="Задач за день">День</th>
-                <th title="Задач за неделю">Нед</th>
-                <th title="Задач за месяц">Мес</th>
-                <th title="Задач за год">Год</th>
-                <th title="Просрочено"><AlertTriangle size={14} /></th>
-                <th title="Монеты за задачи">Монет за задачи</th>
-                <th title="Анти-чит скор">Anti-cheat</th>
-                <th title="Тесты (ср. %)">Тесты %</th>
-                <th title="Время на платформе"><Clock3 size={14} /></th>
+                <th>Роль и отдел</th>
+                <th>Общие KPI</th>
+                <th>Должностные KPI</th>
+                <th>Итог</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map(r => (
-                <tr key={r.user_id}>
-                  <td>{r.rank}</td>
-                  <td><div className={styles.userCell}>{r.avatar_url ? <img src={r.avatar_url} alt="" /> : <span>{r.user_name.slice(0, 1).toUpperCase()}</span>}<strong>{r.user_name}</strong></div></td>
-                  <td><strong>{r.coins_balance}</strong></td>
-                  <td>{r.tasks_completed_day}</td>
-                  <td>{r.tasks_completed_week}</td>
-                  <td>{r.tasks_completed_month}</td>
-                  <td>{r.tasks_completed_year}</td>
-                  <td style={{ color: r.tasks_overdue > 0 ? '#dc2626' : undefined }}>{r.tasks_overdue}</td>
-                  <td>{r.coins_earned_tasks}</td>
-                  <td title={r.anti_cheat_flags.join(', ')} style={{ color: r.anti_cheat_score < 70 ? '#dc2626' : undefined }}>
-                    {r.anti_cheat_score}
-                  </td>
-                  <td>{r.avg_test_score}</td>
-                  <td>{r.total_time_hours}ч</td>
+              {rows.map(row => (
+                <tr key={row.user_id} role="button" tabIndex={0} onClick={() => navigate(`/kpi?user=${encodeURIComponent(row.user_id)}`)} onKeyDown={event => {
+                  if (event.key === 'Enter' || event.key === ' ') navigate(`/kpi?user=${encodeURIComponent(row.user_id)}`);
+                }}>
+                  <td><strong>#{row.rank}</strong></td>
+                  <td><div className={styles.userCell}>{row.avatar_url ? <img src={row.avatar_url} alt="" /> : <span>{row.user_name.slice(0, 1).toUpperCase()}</span>}<strong>{row.user_name}</strong></div></td>
+                  <td><div className={styles.roleCell}><strong>{ROLE_LABELS[row.role] || row.role}</strong><span>{row.department_id || 'Отдел не назначен'}</span></div></td>
+                  <td>{score(row.general_score)}</td>
+                  <td>{row.occupational_score === null ? 'Не применяется' : score(row.occupational_score)}</td>
+                  <td><span className={styles.kpiTotal}>{score(row.overall_score)}</span></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      {!loading && !error && rows.length === 0 && <div className={styles.empty}>Нет сотрудников с доступными показателями KPI.</div>}
     </div>
   );
 }

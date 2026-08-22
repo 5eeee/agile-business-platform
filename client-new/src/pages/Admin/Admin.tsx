@@ -23,12 +23,20 @@ import { MetricsSkeleton } from '../../components/Skeleton/Skeleton';
 import ConfirmModal from '../../components/ConfirmModal/ConfirmModal';
 import type { User } from '../../types';
 import { SPHERES } from '../../types';
+import { ROLE_ACCESS_PRESETS, SECTION_DEFINITIONS } from '../../utils/access';
 import styles from './Admin.module.css';
 
 type Tab = 'users' | 'pending';
 
+const ACCESS_PRESETS: Array<{ label: string; role: 'user' | 'admin' | 'consultant' }> = [
+  { label: 'Штатный сотрудник', role: 'user' },
+  { label: 'Руководитель', role: 'admin' },
+  { label: 'Консультант', role: 'consultant' },
+];
+
 export default function AdminPage() {
   const { language } = useAppSelector(s => s.ui);
+  const { user: currentUser } = useAppSelector(s => s.auth);
   const lang = t(language);
 
   const [tab, setTab] = useState<Tab>('users');
@@ -97,29 +105,22 @@ export default function AdminPage() {
     }
   };
 
-  const ALL_SECTIONS = [
-    { key: 'projects', label: 'Проекты' },
-    { key: 'events', label: 'События' },
-    { key: 'places', label: 'Места силы' },
-    { key: 'music', label: 'Музыка' },
-    { key: 'analytics', label: 'Аналитика' },
-    { key: 'leaderboard', label: 'Лидерборд' },
-    { key: 'shop', label: 'Магазин' },
-  ];
-
   const loadUserAccess = async (userId: string) => {
     if (!userId) {
       setAccessSections({});
       return;
     }
     try {
+      const target = users.find(user => user.id === userId);
       const { data } = await gamificationApi.getAccess(userId);
+      const explicitKeys = Array.isArray(target?.section_access) ? target.section_access : null;
+      const sourceKeys = explicitKeys ?? (target ? ROLE_ACCESS_PRESETS[target.role] : data.section_keys || []);
       const map: Record<string, boolean> = {};
-      ALL_SECTIONS.forEach(s => { map[s.key] = (data.section_keys || []).includes(s.key); });
+      SECTION_DEFINITIONS.forEach(section => { map[section.key] = sourceKeys.includes(section.key); });
       setAccessSections(map);
     } catch {
       const map: Record<string, boolean> = {};
-      ALL_SECTIONS.forEach(s => { map[s.key] = false; });
+      SECTION_DEFINITIONS.forEach(section => { map[section.key] = false; });
       setAccessSections(map);
     }
   };
@@ -131,10 +132,22 @@ export default function AdminPage() {
     setAccessLoading(true);
     try {
       await gamificationApi.setAccess(accessUserId, keys);
+      setUsers(current => current.map(user => user.id === accessUserId ? { ...user, section_access: keys } : user));
     } finally {
       setAccessLoading(false);
     }
   };
+
+  const applyAccessPreset = (role: 'user' | 'admin' | 'consultant') => {
+    const allowed = new Set(ROLE_ACCESS_PRESETS[role]);
+    const map: Record<string, boolean> = {};
+    SECTION_DEFINITIONS.forEach(section => { map[section.key] = allowed.has(section.key); });
+    setAccessSections(map);
+  };
+
+  const accessTarget = users.find(user => user.id === accessUserId) ?? null;
+  const ownerAccessLocked = accessTarget?.role === 'owner';
+  const mayEditAccessTarget = !ownerAccessLocked || currentUser?.role === 'owner';
 
   const approveUser = async (userId: string) => {
     await api.post(`/admin/users/${userId}/approve`);
@@ -339,29 +352,47 @@ export default function AdminPage() {
               </form>
             </div>
 
-            <div className={styles.toolCard}>
-              <div className={styles.toolCardHeader}><span className={styles.toolCardIcon}><ShieldCheck size={20} /></span><div><h3>Доступы к разделам</h3><p>Настройте рабочее пространство конкретного сотрудника.</p></div></div>
+            <div className={`${styles.toolCard} ${styles.accessToolCard}`}>
+              <div className={styles.toolCardHeader}><span className={styles.toolCardIcon}><ShieldCheck size={20} /></span><div><h3>Граф ролей и доступов</h3><p>Права влияют одновременно на меню и прямой переход по адресу.</p></div></div>
               <form onSubmit={submitAccessGrant} className={styles.form}>
                 <select value={accessUserId} onChange={e => { setAccessUserId(e.target.value); loadUserAccess(e.target.value); }} required>
                   <option value="">Выберите пользователя</option>
                   {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
                 </select>
-                {accessUserId && (
-                  <div className={styles.checkboxGrid}>
-                    {ALL_SECTIONS.map(s => (
-                      <label key={s.key} className={styles.checkItem}>
-                        <input type="checkbox" checked={!!accessSections[s.key]} onChange={e => setAccessSections({ ...accessSections, [s.key]: e.target.checked })} />
-                        {s.label}
-                      </label>
-                    ))}
+                {accessTarget && (
+                  <div className={styles.accessGraph}>
+                    <div className={styles.accessIdentity}>
+                      <span className={styles.accessAvatar}>{(accessTarget.name || '?')[0]}</span>
+                      <div><strong>{accessTarget.name}</strong><span>{(lang.roles as Record<string, string>)[accessTarget.role] || accessTarget.role}{accessTarget.department_id ? ` · ${accessTarget.department_id}` : ''}</span></div>
+                    </div>
+                    {!ownerAccessLocked ? <div className={styles.presetRow}>
+                      {ACCESS_PRESETS.map(preset => <button type="button" key={preset.role} onClick={() => applyAccessPreset(preset.role)}>{preset.label}</button>)}
+                    </div> : <p className={styles.accessLockNote}>Владелец имеет полный доступ, включая закрытую финансовую аналитику.</p>}
+                    <div className={styles.checkboxGrid}>
+                      {SECTION_DEFINITIONS.map(section => {
+                        const financeLocked = section.key === 'finance' && accessTarget.role !== 'owner';
+                        const checked = ownerAccessLocked || !!accessSections[section.key];
+                        return (
+                          <label key={section.key} className={`${styles.checkItem} ${checked ? styles.checkItemActive : ''} ${financeLocked ? styles.checkItemLocked : ''}`}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={ownerAccessLocked || financeLocked || !mayEditAccessTarget}
+                              onChange={event => setAccessSections(current => ({ ...current, [section.key]: event.target.checked }))}
+                            />
+                            <span><strong>{section.label}</strong><small>{section.description}</small></span>
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
-                <button className="btn btn-primary btn-sm" type="submit" disabled={accessLoading || !accessUserId}>{accessLoading ? 'Сохранение...' : 'Сохранить доступы'}</button>
+                <button className="btn btn-primary btn-sm" type="submit" disabled={accessLoading || !accessUserId || ownerAccessLocked || !mayEditAccessTarget}>{accessLoading ? 'Сохранение...' : 'Сохранить матрицу доступов'}</button>
               </form>
             </div>
 
             <div className={styles.toolCard}>
-              <div className={styles.toolCardHeader}><span className={styles.toolCardIcon}><Trophy size={20} /></span><div><h3>Рейтинг сотрудников</h3><p>Текущие позиции по результатам и Agile.Coins.</p></div></div>
+              <div className={styles.toolCardHeader}><span className={styles.toolCardIcon}><Trophy size={20} /></span><div><h3>Рейтинг сотрудников</h3><p>Текущие позиции исключительно по итоговому KPI.</p></div></div>
               {leaderboard.length === 0 ? (
                 <p className={styles.empty}>Нет данных</p>
               ) : (
@@ -369,7 +400,7 @@ export default function AdminPage() {
                   {leaderboard.slice(0, 10).map(r => (
                     <div key={r.user_id} className={styles.leaderRow}>
                       <span>#{r.rank} {r.user_name}</span>
-                      <span>{r.coins_balance} coins</span>
+                      <span>{Math.round(r.overall_score ?? 0)}% KPI</span>
                     </div>
                   ))}
                 </div>

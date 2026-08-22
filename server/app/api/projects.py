@@ -12,9 +12,9 @@ from app.models.iteration import Iteration, IterationStatus
 from app.models.board_column import BoardColumn
 from app.models.user import User, UserRole, ADMIN_ROLES
 from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectMemberAdd, ProjectOut, ProjectMemberOut
-from app.middleware.auth import get_current_user
+from app.middleware.auth import get_current_user, require_projects_access
 
-router = APIRouter(prefix="/projects", tags=["Проекты"])
+router = APIRouter(prefix="/projects", tags=["Проекты"], dependencies=[Depends(require_projects_access)])
 
 
 @router.get("", response_model=list[ProjectOut])

@@ -60,6 +60,20 @@
   box-shadow: var(--shadow-sm);
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.error {
+  padding: 14px 16px;
+  color: #b42318;
+  background: rgba(239, 68, 68, .08);
+  border: 1px solid rgba(239, 68, 68, .25);
+  border-radius: 14px;
+}
+
 /* Metrics Cards */
 .metricsGrid {
   display: grid;
@@ -143,10 +157,19 @@
   margin: 0;
 }
 
+.factHint {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 12.5px;
+}
+
+.positive { color: #0f9f6e; }
+.negative { color: #dc3e3e; }
+
 /* Layout Grid */
 .layoutGrid {
-  display: grid;
-  grid-template-columns: 1.6fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 24px;
 }
 
@@ -167,6 +190,27 @@
   flex-direction: column;
   gap: 14px;
 }
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+  font-size: 19px;
+}
+
+.formGroup {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.descriptionField { flex: 2; }
 
 .formRow {
   display: flex;
@@ -237,6 +281,42 @@
   font-size: 11px;
   font-weight: 500;
 }
+
+.amountIncome { color: #0f9f6e !important; font-weight: 750; white-space: nowrap; }
+.amountExpense { color: #dc3e3e !important; font-weight: 750; white-space: nowrap; }
+
+.deleteButton {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  place-items: center;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.deleteButton:hover { color: #dc3e3e; background: rgba(239, 68, 68, .08); border-color: rgba(239, 68, 68, .18); }
+
+.historyHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.historyHeader p { margin: -8px 0 16px; color: var(--color-text-secondary); font-size: 12px; }
+.historyHeader strong { display: grid; min-width: 36px; min-height: 36px; place-items: center; background: var(--color-bg-secondary); border-radius: 10px; }
+
+.emptyState {
+  display: flex;
+  min-height: 190px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.emptyState strong { color: var(--color-text); }
+.emptyState span { max-width: 520px; font-size: 13px; }
 
 .statusSuccess {
   color: #10b981;
@@ -316,6 +396,7 @@
   .header { align-items: stretch; flex-direction: column; padding: 18px; border-radius: 17px; }
   .periodSelector { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
   .periodSelector button { min-height: 42px; padding-inline: 8px; }
+  .headerActions { align-items: stretch; flex-direction: column; width: 100%; }
   .metricsGrid { grid-template-columns: 1fr; gap: 12px; }
   .metricCard { padding: 18px; }
   .budgetProgressLabel { align-items: flex-start; flex-direction: column; gap: 3px; }

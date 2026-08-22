@@ -223,6 +223,7 @@
   box-shadow: 0 10px 30px var(--color-shadow);
 }
 .coinToolCard { border-color: color-mix(in srgb, var(--color-primary) 25%, var(--color-border)); background: linear-gradient(150deg, color-mix(in srgb, var(--color-primary) 4%, var(--color-surface)), var(--color-surface) 40%); }
+.accessToolCard { grid-column: span 2; }
 .toolCardHeader { display: flex; align-items: flex-start; gap: 12px; min-height: 72px; margin-bottom: 16px; padding-bottom: 15px; border-bottom: 1px solid var(--color-border-light); }
 .toolCardIcon { display: grid; place-items: center; flex: 0 0 42px; width: 42px; height: 42px; border-radius: 13px; color: var(--color-primary); background: var(--color-primary-light); }
 .toolCard h3 {
@@ -271,7 +272,55 @@
   .pendingCard { align-items: flex-start; flex-direction: column; gap: 12px; }
   .pendingActions { width: 100%; }
   .pendingActions > button { flex: 1; }
+  .accessToolCard { grid-column: auto; }
 }
+
+.accessGraph {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.accessIdentity {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 13px;
+  background: var(--color-bg-secondary);
+}
+
+.accessIdentity::after {
+  position: absolute;
+  bottom: -14px;
+  left: 27px;
+  width: 1px;
+  height: 14px;
+  background: var(--color-border);
+  content: '';
+}
+
+.accessAvatar {
+  display: grid;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  color: white;
+  background: linear-gradient(135deg, var(--color-primary), #7c5ce7);
+  border-radius: 11px;
+  font-weight: 800;
+}
+
+.accessIdentity div { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.accessIdentity span:last-child { color: var(--color-text-secondary); font-size: 11px; }
+
+.presetRow { display: flex; flex-wrap: wrap; gap: 6px; padding-left: 44px; }
+.presetRow button { padding: 7px 9px; color: var(--color-text-secondary); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 9px; cursor: pointer; font-size: 11px; font-weight: 700; }
+.presetRow button:hover { color: var(--color-primary); border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border)); }
+.accessLockNote { margin: 0; padding: 10px 12px; color: var(--color-text-secondary); background: var(--color-bg-secondary); border-radius: 10px; font-size: 12px; }
 
 .checkboxGrid {
   display: grid;
@@ -281,7 +330,7 @@
 }
 .checkItem {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   font-size: 13px;
   cursor: pointer;
@@ -290,6 +339,11 @@
   border: 1px solid var(--color-border-light);
   transition: background 0.15s;
 }
+.checkItemActive { border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border)); background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface)); }
+.checkItemLocked { cursor: not-allowed; opacity: .58; }
+.checkItem > span { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.checkItem strong { color: var(--color-text); font-size: 12px; }
+.checkItem small { color: var(--color-text-muted); font-size: 10px; line-height: 1.35; }
 .checkItem:hover {
   background: var(--color-surface-alt);
 }

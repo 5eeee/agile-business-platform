@@ -1,7 +1,7 @@
 # Pydantic-схемы геймификации
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 
@@ -182,6 +182,35 @@ class UserKPIOut(BaseModel):
     manager_kpi7_department_control: Optional[float] = None
 
 
+class KPIDetailEventOut(BaseModel):
+    """One auditable fact that changed or explains a KPI value."""
+
+    id: str
+    event_type: str
+    title: str
+    description: Optional[str] = None
+    value: Optional[float] = None
+    value_label: Optional[str] = None
+    status: Optional[str] = None
+    occurred_at: datetime
+    source_type: Optional[str] = None
+    source_id: Optional[str] = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class KPIDetailOut(BaseModel):
+    user_id: uuid.UUID
+    user_name: str
+    kpi_key: str
+    title: str
+    formula: str
+    value: Optional[float] = None
+    unit: str = "%"
+    period_start: datetime
+    period_end: datetime
+    events: list[KPIDetailEventOut] = Field(default_factory=list)
+
+
 class SessionPing(BaseModel):
     """Heartbeat для отслеживания времени на платформе"""
     pass
@@ -192,6 +221,11 @@ class LeaderboardEntry(BaseModel):
     user_id: uuid.UUID
     user_name: str
     avatar_url: Optional[str] = None
+    role: str = "user"
+    department_id: Optional[str] = None
+    general_score: Optional[float] = None
+    occupational_score: Optional[float] = None
+    overall_score: Optional[float] = None
     coins_balance: float = 0
     topics_completed: int = 0
     avg_test_score: float = 0.0

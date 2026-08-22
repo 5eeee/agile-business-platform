@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Activity, Timer, Gauge, Brain, RefreshCcw, Coins,
   Search, BookOpen, ChevronDown, ChevronUp, AlertCircle, Info, Award, HelpCircle, Briefcase, Sparkles, Filter,
-  ArrowLeft, Building2, Clock3, UserRound, ClipboardCheck
+  ArrowLeft, Building2, Clock3, UserRound, ClipboardCheck, ChevronRight, X, CalendarRange
 } from 'lucide-react';
 import { 
   gamificationApi, 
@@ -12,7 +12,8 @@ import {
   type PerformanceReview, 
   type ManagerKPIDetails,
   type DepartmentKPIHealth,
-  type ManagerReactivity
+  type ManagerReactivity,
+  type KPIDetail,
 } from '../../api/gamification';
 import { useAppSelector } from '../../store/hooks';
 import api from '../../api/client';
@@ -53,6 +54,9 @@ export default function KPIPage() {
   const [kpi, setKpi] = useState<UserKPI | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [detail, setDetail] = useState<KPIDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
 
   // Manager KPI state
   const [managerDetails, setManagerDetails] = useState<ManagerKPIDetails | null>(null);
@@ -218,6 +222,26 @@ export default function KPIPage() {
     }
   };
 
+  const openKpiDetail = async (key: string) => {
+    setDetailLoading(true);
+    setDetailError('');
+    setDetail(null);
+    try {
+      const { data } = await gamificationApi.getKPIDetails(key, isViewingOther ? targetUserId : null);
+      setDetail(data);
+    } catch (requestError: any) {
+      setDetailError(requestError?.response?.data?.detail || 'Не удалось загрузить историю показателя');
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const closeKpiDetail = () => {
+    setDetail(null);
+    setDetailError('');
+    setDetailLoading(false);
+  };
+
   const filteredKPIs = useMemo(() => {
     return kpiDataList.filter(kpi => {
       // Filter by category
@@ -354,7 +378,14 @@ export default function KPIPage() {
               const value = item.value;
               const carryover = finiteKpiValue(kpi.kpi9_carryover) ?? 0;
               return (
-                <article className={styles.metricCard} data-tone={valueTone(value)} key={item.key}>
+                <button
+                  type="button"
+                  className={styles.metricCard}
+                  data-tone={valueTone(value)}
+                  key={item.key}
+                  onClick={() => openKpiDetail(item.key)}
+                  aria-label={`Открыть расчёт: ${item.title}`}
+                >
                   <div className={styles.metricTop}><span>{item.key}</span><Activity size={15} /></div>
                   <div className={styles.metricValue}>
                     <strong>
@@ -364,7 +395,8 @@ export default function KPIPage() {
                   <span className={styles.metricName}>{item.title}</span>
                   <span className={styles.metricBar}><i style={{ width: `${Math.max(0, Math.min(value ?? 0, 100))}%` }} /></span>
                   {item.key === 'KPI9' && carryover > 0 && <small>+{carryover}% перенос</small>}
-                </article>
+                  <span className={styles.metricOpen}>Расшифровка <ChevronRight size={14} /></span>
+                </button>
               );
             })}
             </div>
@@ -376,24 +408,93 @@ export default function KPIPage() {
                 <div><span className={styles.groupNumber}>02</span><div><h3>Должностные KPI руководителя</h3><p>Управление сотрудниками, инициативами и показателями отдела</p></div></div>
                 <strong>{occupationalScore === null ? 'Нет данных' : `${Math.round(occupationalScore)}%`}</strong>
               </div>
-              <div className={styles.managerSla}>
+              <button type="button" className={styles.managerSla} onClick={() => openKpiDetail('M2')}>
                 <Clock3 size={17} /><span>Среднее время реакции</span>
                 <strong>{finiteKpiValue(kpi.manager_kpi2_reaction_days) === null ? '—' : `${finiteKpiValue(kpi.manager_kpi2_reaction_days)?.toFixed(1)} раб. дн.`}</strong>
-                <small>Норма: до 1 рабочего дня</small>
-              </div>
+                <small>Норма: до 1 рабочего дня · открыть историю</small>
+              </button>
               <div className={styles.metricStrip}>
                 {occupationalKpis.map(item => (
-                  <article className={styles.metricCard} data-tone={valueTone(item.value)} key={item.key}>
+                  <button
+                    type="button"
+                    className={styles.metricCard}
+                    data-tone={valueTone(item.value)}
+                    key={item.key}
+                    onClick={() => openKpiDetail(item.key)}
+                    aria-label={`Открыть расчёт: ${item.title}`}
+                  >
                     <div className={styles.metricTop}><span>{item.key}</span><Briefcase size={15} /></div>
                     <div className={styles.metricValue}><strong>{item.value === null ? '—' : `${Math.round(item.value)}%`}</strong></div>
                     <span className={styles.metricName}>{item.title}</span>
                     <span className={styles.metricBar}><i style={{ width: `${Math.max(0, Math.min(item.value ?? 0, 100))}%` }} /></span>
-                  </article>
+                    <span className={styles.metricOpen}>Расшифровка <ChevronRight size={14} /></span>
+                  </button>
                 ))}
               </div>
             </div>
           )}
         </section>
+      )}
+
+      {(detailLoading || detailError || detail) && (
+        <div className={styles.detailOverlay} onMouseDown={event => { if (event.target === event.currentTarget) closeKpiDetail(); }}>
+          <aside className={styles.detailDrawer} role="dialog" aria-modal="true" aria-labelledby="kpi-detail-title">
+            <header className={styles.detailHeader}>
+              <div>
+                <span className={styles.eyebrow}>Доказательная история KPI</span>
+                <h2 id="kpi-detail-title">{detail?.title || 'Загрузка расчёта'}</h2>
+                {detail && <p>{detail.user_name} · {detail.kpi_key}</p>}
+              </div>
+              <button type="button" className={styles.detailClose} onClick={closeKpiDetail} aria-label="Закрыть"><X size={20} /></button>
+            </header>
+
+            {detailLoading && <div className={styles.detailLoading}><span /><strong>Собираем события показателя…</strong></div>}
+            {detailError && <div className={styles.detailError}><AlertCircle size={20} /><div><strong>История недоступна</strong><span>{detailError}</span></div></div>}
+
+            {detail && (
+              <>
+                <section className={styles.detailSummary}>
+                  <div className={styles.detailScore} data-tone={valueTone(detail.value)}>
+                    <strong>{detail.value === null ? '—' : Number(detail.value.toFixed(1))}</strong>
+                    <span>{detail.value === null ? 'нет данных' : detail.unit}</span>
+                  </div>
+                  <div className={styles.detailFormula}>
+                    <span>Как считается</span>
+                    <strong>{detail.formula}</strong>
+                    <small><CalendarRange size={14} /> {new Date(detail.period_start).toLocaleDateString('ru-RU')} — {new Date(detail.period_end).toLocaleDateString('ru-RU')}</small>
+                  </div>
+                </section>
+
+                <div className={styles.detailTimelineHeader}>
+                  <div><h3>Что повлияло на показатель</h3><p>Каждое начисление и штраф привязаны к фактическому событию.</p></div>
+                  <span>{detail.events.length}</span>
+                </div>
+                <div className={styles.detailTimeline}>
+                  {detail.events.map(event => (
+                    <article className={styles.detailEvent} data-status={event.status || 'neutral'} key={event.id}>
+                      <span className={styles.detailEventDot} aria-hidden="true" />
+                      <div className={styles.detailEventBody}>
+                        <div className={styles.detailEventTop}>
+                          <div><strong>{event.title}</strong><time>{new Date(event.occurred_at).toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</time></div>
+                          {event.value_label && <span>{event.value_label}</span>}
+                        </div>
+                        {event.description && <p>{event.description}</p>}
+                        <div className={styles.detailEventMeta}>
+                          <span>{event.event_type.replace(/_/g, ' ')}</span>
+                          {event.source_type && <span>Источник: {event.source_type}</span>}
+                          {event.status && <span>Статус: {event.status}</span>}
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                  {detail.events.length === 0 && (
+                    <div className={styles.detailEmpty}><Info size={23} /><strong>Событий за период пока нет</strong><span>Значение появится после подтверждённого рабочего действия.</span></div>
+                  )}
+                </div>
+              </>
+            )}
+          </aside>
+        </div>
       )}
 
       {!isViewingOther && (

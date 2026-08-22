@@ -42,6 +42,7 @@ if %errorlevel% neq 0 (
 )
 
 :: Check/create .env
+for /f %%i in ('powershell -NoProfile -Command "[guid]::NewGuid().ToString('N')"') do set ADMIN_PASSWORD=%%i
 if not exist ".env" (
     echo Creating .env with local defaults...
     (
@@ -55,11 +56,12 @@ if not exist ".env" (
         echo ELASTIC_PASSWORD=changeme
         echo CORS_ORIGINS=["http://localhost:3000","http://localhost:5173"]
         echo ADMIN_SEED_EMAIL=admin@agile.local
-        echo ADMIN_SEED_PASSWORD=admin123
+        echo ADMIN_SEED_PASSWORD=%ADMIN_PASSWORD%
         echo WORKERS=2
         echo FRONTEND_PORT=3000
     ) > .env
     echo [OK] .env created
+    echo Initial admin password: %ADMIN_PASSWORD%
 )
 
 echo Starting with Docker Compose...

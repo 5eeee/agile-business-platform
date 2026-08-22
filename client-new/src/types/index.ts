@@ -75,6 +75,7 @@ export interface ApplicationTask {
 export interface Application {
   id: string;
   source: string;
+  external_reference?: string | null;
   status: string;
   client_name: string;
   client_email?: string;

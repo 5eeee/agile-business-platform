@@ -110,6 +110,7 @@ if (-not (Test-Path "server\.env")) {
 
     # Генерируем SECRET_KEY
     $secretKey = python -c "import secrets; print(secrets.token_urlsafe(32))"
+    $adminPassword = python -c "import secrets; print(secrets.token_urlsafe(24))"
 
     # Записываем базовые значения
     $envContent = @"
@@ -124,7 +125,7 @@ S3_ACCESS_KEY=minioadmin
 S3_SECRET_KEY=minioadmin
 S3_BUCKET=agile-files
 ADMIN_SEED_EMAIL=admin@agile.com
-ADMIN_SEED_PASSWORD=admin123
+ADMIN_SEED_PASSWORD=$adminPassword
 CORS_ORIGINS=["http://localhost:5173","http://localhost:5174","http://localhost:3000"]
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_ADMIN_CHAT_ID=
@@ -132,6 +133,7 @@ TELEGRAM_WEBHOOK_SECRET=
 "@
     Set-Content "server\.env" $envContent -Encoding UTF8
     Write-Host "  SECRET_KEY сгенерирован автоматически" -ForegroundColor DarkGreen
+    Write-Host "  Начальный пароль администратора: $adminPassword" -ForegroundColor Yellow
 } else {
     Write-Host "  server/.env уже существует — пропускаем" -ForegroundColor DarkGreen
 }

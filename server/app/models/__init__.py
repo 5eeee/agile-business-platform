@@ -25,6 +25,8 @@ from app.models.application import Application, ApplicationMember, ApplicationHi
 from app.models.customer_satisfaction import (
     CustomerSurveyToken, ProjectContribution, ProjectReview, PromoCode, KPISatisfactionHistory,
 )
+from app.models.finance import FinancialOperation
+from app.models.conference import Conference, ConferenceSSOUse
 
 __all__ = [
     "User", "UserSphereRole",
@@ -51,4 +53,6 @@ __all__ = [
     "EmployeeIdea", "EmployeeActivityLog",
     "Application", "ApplicationMember", "ApplicationHistory", "ApplicationTask",
     "CustomerSurveyToken", "ProjectContribution", "ProjectReview", "PromoCode", "KPISatisfactionHistory",
+    "FinancialOperation",
+    "Conference",
 ]

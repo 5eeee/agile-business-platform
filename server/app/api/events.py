@@ -11,9 +11,9 @@ from app.database import get_db
 from app.models.event import Event, EventParticipant, EventPhoto, EventChatMessage, EventReminder
 from app.models.user import User
 from app.schemas.event import EventCreate, EventUpdate, EventOut, EventParticipate, EventParticipantOut
-from app.middleware.auth import get_current_user, require_admin
+from app.middleware.auth import get_current_user, require_admin, require_events_access
 
-router = APIRouter(prefix="/events", tags=["События"])
+router = APIRouter(prefix="/events", tags=["События"], dependencies=[Depends(require_events_access)])
 
 
 @router.get("", response_model=list[EventOut])

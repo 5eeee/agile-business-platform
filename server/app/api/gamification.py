@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.user import User, UserRole, ADMIN_ROLES
+from app.middleware.auth import require_admin, require_company_access, require_kpi_access, require_leaderboard_access
+from app.models.user import User, UserRole, UserStatus, ADMIN_ROLES
 from app.models.training import TrainingTopic, TopicProgress, CourseAssignment
 from app.models.gamification import (
     CoinTransaction, CoinTransactionType,
@@ -18,16 +19,19 @@ from app.models.gamification import (
     TopicTestResult, UserSession, UserShopEquip,
     KPIDrop, PerformanceReview, ManagerKPI2Cache, KPIManagerHistory, ManagerOvertimeCounter, ManagerOvertimeAction,
     AttentivenessLog, ManagerKPI4Points, ActionTypesWithMandatoryFields, ManagerResponsibility,
-    EmployeeKPI8Points, KPI7ManagerPoints, KPI7ReviewImpact, EmployeeIdea
+    EmployeeKPI8Points, KPI7ManagerPoints, KPI7ReviewImpact, EmployeeIdea,
+    AttendanceLog, EmployeeActivityLog, TaskReturn, OvertimeEvent, HelpLog,
+    KPI9Bonus, WeeklyReport, WeeklyReportReview, EmployeeKPIHistory
 )
-from app.models.task import TaskHistory
+from app.models.task import Task, TaskHistory
 from app.models.notification import Notification
+from app.models.customer_satisfaction import ProjectContribution, ProjectReview
 from app.schemas.gamification import (
     CoinBalanceOut, CoinTransactionOut, AdminCoinGrant,
     ShopItemCreate, ShopItemUpdate, ShopItemOut, ShopPurchaseOut,
     ShopShowcaseItemOut, EquippedItemOut, AchievementOut,
     TestSubmit, TestResultOut,
-    UserKPIOut, LeaderboardEntry,
+    UserKPIOut, KPIDetailEventOut, KPIDetailOut, LeaderboardEntry,
     SectionAccessGrant, UserSectionAccessOut,
     KPIDropOut, PerformanceReviewCreate, PerformanceReviewOut, ManagerKPIDetailsOut,
     DepartmentKPIHealthOut, ManagerReactivityOut,
@@ -66,6 +70,37 @@ kpi_cache = SimpleMemoryCache()
 
 # ===================== HELPERS =====================
 
+KPI_DETAIL_DEFINITIONS: dict[str, tuple[str, str, str]] = {
+    "KPI1": ("Соблюдение дедлайнов", "Задачи в срок / (задачи в срок + просроченные без уважительной причины) × 100%", "%"),
+    "KPI2": ("Пунктуальность и дисциплина рабочего времени", "Шкала штрафных баллов за опоздания, ранние уходы и неполную отметку рабочего дня", "%"),
+    "KPI3": ("Инициативность и заинтересованность", "0,2 × идеи + 0,5 × мероприятия + 0,3 × проявленный интерес", "%"),
+    "KPI4": ("Сверхурочная загрузка", "Сумма подтверждённых сверхурочных событий с ограничением 100%", "%"),
+    "KPI5": ("Качество выполнения работ", "100% − вес подтверждённых возвратов на доработку", "%"),
+    "KPI8": ("Внимательность", "Баллы корректного заполнения обязательных полей / 20 × 100%", "%"),
+    "KPI9": ("Бонусный индекс дополнительной активности", "Сумма подтверждённых бонусных событий; максимум 100%, остаток переносится", "%"),
+    "KPI10": ("Ответственность сотрудника", "Сумма положительных и отрицательных событий / 20 × 100%", "%"),
+    "TEAM": ("Удовлетворённость заказчика", "Взвешенная оценка заказчиков по проектам с учётом вклада сотрудника", "%"),
+    "M1": ("Реакция на падения KPI сотрудников", "Средний балл реакции: 0–1 день = 100%, 2 = 70%, 3 = 20%, 4+ = 0%", "%"),
+    "M2": ("Среднее время реакции", "Сумма рабочих дней до проведённых разборов / количество разборов", "раб. дн."),
+    "M3": ("Ответственность руководителя", "Сумма управленческих событий / 40 × 100%", "%"),
+    "M4": ("Внимательность руководителя", "Баланс корректных и ошибочных управленческих действий", "%"),
+    "M5": ("Управление инициативами", "Средняя скорость решения по идеям сотрудников", "%"),
+    "M6": ("Сверхурочная управленческая активность", "10% за подтверждённое действие вне рабочего времени, максимум 100%", "%"),
+    "M7": ("Контроль показателей отдела", "Бонусы и штрафы за дисциплину отдела и результативность разборов / 40 × 100%", "%"),
+}
+
+
+def _can_view_kpi(viewer: User, target: User) -> bool:
+    if viewer.id == target.id or viewer.role in {UserRole.OWNER, UserRole.DEPUTY_OWNER}:
+        return True
+    return bool(
+        viewer.role == UserRole.ADMIN
+        and (
+            target.manager_id == viewer.id
+            or (viewer.department_id and target.department_id == viewer.department_id)
+        )
+    )
+
 def _to_decimal(value: float | int | Decimal) -> Decimal:
     return Decimal(str(value)).quantize(Decimal("0.01"))
 
@@ -88,12 +123,6 @@ async def add_coins(db: AsyncSession, user_id: uuid.UUID, amount: float | int | 
     db.add(tx)
     await db.flush()
     return tx
-
-
-def require_admin(user: User = Depends(get_current_user)) -> User:
-    if user.role not in ADMIN_ROLES:
-        raise HTTPException(403, "Только администраторы")
-    return user
 
 
 def _can_manage_employee(manager: User, employee: User) -> bool:
@@ -533,7 +562,7 @@ async def session_end(db: AsyncSession = Depends(get_db), user: User = Depends(g
 
 
 @router.get("/kpi/me", response_model=UserKPIOut)
-async def my_kpi(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def my_kpi(db: AsyncSession = Depends(get_db), user: User = Depends(require_kpi_access)):
     cache_key = f"kpi_user:{user.id}"
     cached_data = kpi_cache.get(cache_key)
     if cached_data is not None:
@@ -547,7 +576,7 @@ async def my_kpi(db: AsyncSession = Depends(get_db), user: User = Depends(get_cu
 async def user_kpi(
     user_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    viewer: User = Depends(get_current_user),
+    viewer: User = Depends(require_kpi_access),
 ):
     """KPI сотрудника с доступом по организационной иерархии.
 
@@ -558,15 +587,7 @@ async def user_kpi(
     if not target:
         raise HTTPException(404, "Пользователь не найден")
 
-    can_view_all = viewer.role in {UserRole.OWNER, UserRole.DEPUTY_OWNER}
-    is_self = viewer.id == target.id
-    is_direct_report = target.manager_id == viewer.id
-    is_same_department = bool(
-        viewer.role == UserRole.ADMIN
-        and viewer.department_id
-        and target.department_id == viewer.department_id
-    )
-    if not (can_view_all or is_self or is_direct_report or is_same_department):
+    if not _can_view_kpi(viewer, target):
         raise HTTPException(403, "KPI доступны только сотруднику и его руководителям")
 
     cache_key = f"kpi_user:{user_id}"
@@ -576,6 +597,352 @@ async def user_kpi(
     res = await _build_kpi(db, target.id, target.name, target.avatar_url)
     kpi_cache.set(cache_key, res, ttl=15)
     return res
+
+
+@router.get("/kpi/details/{kpi_key}", response_model=KPIDetailOut)
+async def kpi_details(
+    kpi_key: str,
+    user_id: Optional[uuid.UUID] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    db: AsyncSession = Depends(get_db),
+    viewer: User = Depends(require_kpi_access),
+):
+    """Return the evidence ledger behind one KPI instead of a bare percentage."""
+    key = kpi_key.upper().strip()
+    if key not in KPI_DETAIL_DEFINITIONS:
+        raise HTTPException(404, "Показатель не найден")
+
+    target = viewer if user_id is None else await db.get(User, user_id)
+    if not target:
+        raise HTTPException(404, "Пользователь не найден")
+    if not _can_view_kpi(viewer, target):
+        raise HTTPException(403, "Нет доступа к детализации KPI сотрудника")
+
+    now = datetime.utcnow()
+    period_end = min(date_to or now, now)
+    if date_from:
+        period_start = date_from
+    elif key == "KPI1":
+        period_start = datetime(2000, 1, 1)
+    elif key in {"KPI3", "KPI5", "TEAM"}:
+        current_week_start = datetime.combine((period_end - timedelta(days=period_end.weekday())).date(), datetime.min.time())
+        period_start = current_week_start - timedelta(days=7)
+    else:
+        period_start = datetime(period_end.year, period_end.month, 1)
+    if period_start > period_end:
+        raise HTTPException(400, "Начало периода должно быть раньше окончания")
+
+    snapshot = await _build_kpi(db, target.id, target.name, target.avatar_url)
+    value_fields = {
+        "KPI1": "kpi1_deadlines", "KPI2": "kpi2_punctuality", "KPI3": "kpi3_initiative",
+        "KPI4": "kpi4_overtime", "KPI5": "kpi5_quality", "KPI8": "kpi8_attentiveness",
+        "KPI9": "kpi9_bonus", "KPI10": "kpi10_responsibility", "TEAM": "kpi_customer_satisfaction",
+        "M1": "manager_kpi1_reaction_index", "M2": "manager_kpi2_reaction_days",
+        "M3": "manager_kpi3_responsibility", "M4": "manager_kpi4_attentiveness",
+        "M5": "manager_kpi5_idea_reaction", "M6": "manager_kpi6_overtime",
+        "M7": "manager_kpi7_department_control",
+    }
+    value = getattr(snapshot, value_fields[key], None)
+    events: list[KPIDetailEventOut] = []
+
+    def add_event(
+        row_id: object,
+        event_type: str,
+        title: str,
+        occurred_at: datetime,
+        *,
+        description: Optional[str] = None,
+        event_value: Optional[float] = None,
+        value_label: Optional[str] = None,
+        status: Optional[str] = None,
+        source_type: Optional[str] = None,
+        source_id: Optional[object] = None,
+        metadata: Optional[dict] = None,
+    ) -> None:
+        events.append(KPIDetailEventOut(
+            id=str(row_id), event_type=event_type, title=title, description=description,
+            value=event_value, value_label=value_label, status=status, occurred_at=occurred_at,
+            source_type=source_type, source_id=str(source_id) if source_id else None,
+            metadata=metadata or {},
+        ))
+
+    if key == "KPI1":
+        rows = (await db.execute(select(Task).where(
+            Task.assignee_id == target.id,
+            Task.is_completed == True,
+            Task.updated_at >= period_start,
+            Task.updated_at <= period_end,
+        ).order_by(Task.updated_at.desc()).limit(150))).scalars().all()
+        for row in rows:
+            status_label = {
+                "in_time": "Сдано в срок", "overdue": "Просрочено", "excused": "Уважительная причина",
+                "rework": "Возврат на доработку",
+            }.get(row.kpi_status or "", row.kpi_status or "Ожидает итоговой отметки")
+            deadline = row.deadline.strftime("%d.%m.%Y %H:%M") if row.deadline else "не задан"
+            submitted = row.first_submitted_at.strftime("%d.%m.%Y %H:%M") if row.first_submitted_at else "не зафиксирована"
+            add_event(row.id, "task_deadline", row.title, row.updated_at,
+                      description=f"Дедлайн: {deadline}. Первая отправка: {submitted}.",
+                      event_value=1 if row.kpi_status == "in_time" else -1 if row.kpi_status == "overdue" else 0,
+                      value_label=status_label, status=row.kpi_status, source_type="task", source_id=row.id,
+                      metadata={"is_discrepancy": row.is_discrepancy, "has_excuse": row.has_excuse,
+                                "return_count": row.return_count, "bonus_quality_task": row.is_bonus_eligible})
+
+    elif key == "KPI2":
+        rows = (await db.execute(select(AttendanceLog).where(
+            AttendanceLog.employee_id == target.id,
+            AttendanceLog.date >= period_start,
+            AttendanceLog.date <= period_end,
+        ).order_by(AttendanceLog.date.desc()).limit(150))).scalars().all()
+        for row in rows:
+            check_in = row.check_in.strftime("%H:%M") if row.check_in else "не отмечен"
+            check_out = row.check_out.strftime("%H:%M") if row.check_out else "не отмечен"
+            penalty = float(row.penalty_points or 0)
+            add_event(row.id, "attendance", f"Рабочий день {row.date.strftime('%d.%m.%Y')}", row.date,
+                      description=f"Приход: {check_in}. Уход: {check_out}. Опоздание: {row.late_minutes} мин. Ранний уход: {row.early_leave_minutes} мин.",
+                      event_value=-penalty, value_label=f"−{penalty:g} балла" if penalty else "Без нарушений",
+                      status="violation" if penalty else "ok", source_type="attendance", source_id=row.id,
+                      metadata={"penalty_day": row.is_penalty_day, "attendance_fulfilled": row.attendance_fulfilled})
+
+    elif key == "KPI3":
+        ideas = (await db.execute(select(EmployeeIdea).where(
+            EmployeeIdea.employee_id == target.id,
+            EmployeeIdea.created_at >= period_start,
+            EmployeeIdea.created_at <= period_end,
+        ).order_by(EmployeeIdea.created_at.desc()).limit(100))).scalars().all()
+        for row in ideas:
+            idea_value = 25.0 if row.status == "success" else 6.25 if row.status == "testing" else 0.0
+            add_event(row.id, "idea", row.description[:120], row.created_at,
+                      description=row.comment or "Комментарий руководителя пока не добавлен",
+                      event_value=idea_value, value_label=f"Вес идеи: {idea_value:g}%", status=row.status,
+                      source_type="idea", source_id=row.id,
+                      metadata={"idea_type": row.idea_type, "sphere": row.sphere, "decision": row.decision,
+                                "reviewed_at": row.reviewed_at.isoformat() if row.reviewed_at else None,
+                                "reaction_days": row.reaction_days})
+        activities = (await db.execute(select(EmployeeActivityLog).where(
+            EmployeeActivityLog.employee_id == target.id,
+            EmployeeActivityLog.date >= period_start,
+            EmployeeActivityLog.date <= period_end,
+        ).order_by(EmployeeActivityLog.date.desc()).limit(100))).scalars().all()
+        for row in activities:
+            add_event(row.id, row.activity_type, row.title or row.sub_type, row.date,
+                      description=row.comment, event_value=1, value_label="+1 событие",
+                      status="confirmed", source_type="activity", source_id=row.id,
+                      metadata={"sub_type": row.sub_type})
+
+    elif key == "KPI4":
+        rows = (await db.execute(select(OvertimeEvent).where(
+            OvertimeEvent.employee_id == target.id,
+            OvertimeEvent.month >= period_start,
+            OvertimeEvent.month <= period_end,
+        ).order_by(OvertimeEvent.created_at.desc()).limit(150))).scalars().all()
+        for row in rows:
+            awarded = float(row.percent_awarded or 0)
+            add_event(row.id, "overtime", "Сверхурочная задача", row.created_at,
+                      description="Качественная работа" if row.event_type == "quality" else "Работа потребовала доработок",
+                      event_value=awarded, value_label=f"+{awarded:g}%", status=row.event_type,
+                      source_type="task", source_id=row.source_id,
+                      metadata={"order_number": row.order_number})
+
+    elif key == "KPI5":
+        rows = (await db.execute(select(TaskReturn).where(
+            TaskReturn.employee_id == target.id,
+            TaskReturn.return_time >= period_start,
+            TaskReturn.return_time <= period_end,
+        ).order_by(TaskReturn.return_time.desc()).limit(150))).scalars().all()
+        task_ids = {row.task_id for row in rows}
+        task_rows = (await db.execute(select(Task).where(Task.id.in_(task_ids)))).scalars().all() if task_ids else []
+        task_titles = {row.id: row.title for row in task_rows}
+        for row in rows:
+            weight = float(row.total_weight or 0)
+            add_event(row.id, "task_return", task_titles.get(row.task_id, "Возврат задачи"), row.return_time,
+                      description=row.comment, event_value=-weight, value_label=f"−{weight:g} балла",
+                      status="external" if row.is_external else row.error_category,
+                      source_type="task", source_id=row.task_id,
+                      metadata={"effective_hours": float(row.effective_hours) if row.effective_hours is not None else None,
+                                "return_count": row.return_count, "is_external": row.is_external,
+                                "is_iterative": row.is_iterative})
+
+    elif key == "KPI8":
+        rows = (await db.execute(select(AttentivenessLog).where(
+            AttentivenessLog.user_id == target.id,
+            AttentivenessLog.created_at >= period_start,
+            AttentivenessLog.created_at <= period_end,
+        ).order_by(AttentivenessLog.created_at.desc()).limit(150))).scalars().all()
+        for row in rows:
+            points = float(row.penalty_points or 0)
+            add_event(row.id, "attentiveness", row.action_type, row.created_at,
+                      description="Форма заполнена с первой попытки" if row.success else "Обязательные поля заполнены не полностью",
+                      event_value=points, value_label=f"{points:+g} балла", status="success" if row.success else "error",
+                      source_type=row.action_type, source_id=row.action_id,
+                      metadata={"attempt_number": row.attempt_number, "is_overtime": row.is_overtime})
+
+    elif key == "KPI9":
+        rows = (await db.execute(select(KPI9Bonus).where(
+            KPI9Bonus.employee_id == target.id,
+            KPI9Bonus.month >= period_start,
+            KPI9Bonus.month <= period_end,
+        ).order_by(KPI9Bonus.created_at.desc()).limit(200))).scalars().all()
+        source_ids = {row.source_id for row in rows if row.source_id}
+        source_tasks = (await db.execute(select(Task).where(Task.id.in_(source_ids)))).scalars().all() if source_ids else []
+        source_returns = (await db.execute(select(TaskReturn).where(TaskReturn.id.in_(source_ids)))).scalars().all() if source_ids else []
+        source_help = (await db.execute(select(HelpLog).where(HelpLog.id.in_(source_ids)))).scalars().all() if source_ids else []
+        tasks_by_id = {row.id: row for row in source_tasks}
+        returns_by_id = {row.id: row for row in source_returns}
+        help_by_id = {row.id: row for row in source_help}
+        type_labels = {
+            "early_arrival": "Ранний приход", "help": "Помощь коллеге",
+            "quality_first_submission": "Качественная сдача раньше срока",
+            "quick_fix": "Быстрое исправление", "overtime": "Сверхурочная работа",
+            "excellent_work": "Отличная работа по итогам периода",
+        }
+        for row in rows:
+            awarded = float(row.percent or 0)
+            source = row.source_id
+            description = None
+            source_type = "kpi_event"
+            if source in tasks_by_id:
+                description = f"Задача: {tasks_by_id[source].title}"
+                source_type = "task"
+            elif source in returns_by_id:
+                description = returns_by_id[source].comment
+                source_type = "task_return"
+            elif source in help_by_id:
+                description = help_by_id[source].comment
+                source_type = "help"
+            add_event(row.id, row.event_type, type_labels.get(row.event_type, row.event_type.replace("_", " ").title()), row.created_at,
+                      description=description, event_value=awarded, value_label=f"+{awarded:g}%", status="confirmed",
+                      source_type=source_type, source_id=source,
+                      metadata={"month": row.month.date().isoformat()})
+
+    elif key == "KPI10":
+        tasks = (await db.execute(select(Task).where(
+            Task.assignee_id == target.id,
+            Task.is_completed == True,
+            Task.updated_at >= period_start,
+            Task.updated_at <= period_end,
+        ).order_by(Task.updated_at.desc()).limit(120))).scalars().all()
+        for row in tasks:
+            points = -1.0 if row.kpi_status == "overdue" and not row.has_excuse else 1.0 if row.kpi_status == "in_time" else 0.0
+            add_event(row.id, "task_responsibility", row.title, row.updated_at,
+                      description="Просрочка без уважительной причины" if points < 0 else "Задача завершена своевременно",
+                      event_value=points, value_label=f"{points:+g} балл", status=row.kpi_status,
+                      source_type="task", source_id=row.id)
+        attendance = (await db.execute(select(AttendanceLog).where(
+            AttendanceLog.employee_id == target.id,
+            AttendanceLog.date >= period_start,
+            AttendanceLog.date <= period_end,
+            AttendanceLog.penalty_points > 0,
+        ).order_by(AttendanceLog.date.desc()).limit(120))).scalars().all()
+        for row in attendance:
+            points = -float(row.penalty_points or 0)
+            add_event(row.id, "discipline_violation", f"Нарушение дисциплины {row.date.strftime('%d.%m.%Y')}", row.date,
+                      description=f"Опоздание {row.late_minutes} мин., ранний уход {row.early_leave_minutes} мин.",
+                      event_value=points, value_label=f"{points:g} балла", status="violation",
+                      source_type="attendance", source_id=row.id)
+
+    elif key == "TEAM":
+        rows = (await db.execute(select(ProjectReview, ProjectContribution).join(
+            ProjectContribution, ProjectContribution.project_id == ProjectReview.project_id
+        ).where(
+            ProjectContribution.user_id == target.id,
+            ProjectReview.submitted_at >= period_start,
+            ProjectReview.submitted_at <= period_end,
+        ).order_by(ProjectReview.submitted_at.desc()).limit(100))).all()
+        for review, contribution in rows:
+            add_event(review.id, "customer_review", f"Оценка заказчика: {review.rating}/5", review.submitted_at,
+                      description=review.comment, event_value=float(review.rating) * 20,
+                      value_label=f"{review.rating}/5 · вклад {float(contribution.weight) * 100:.0f}%",
+                      status="confirmed", source_type="project", source_id=review.project_id)
+
+    elif key in {"M1", "M2"}:
+        rows = (await db.execute(select(PerformanceReview).where(
+            PerformanceReview.manager_id == target.id,
+            PerformanceReview.review_date >= period_start,
+            PerformanceReview.review_date <= period_end,
+        ).order_by(PerformanceReview.review_date.desc()).limit(150))).scalars().all()
+        for row in rows:
+            days = float(row.reaction_days) if row.reaction_days is not None else None
+            add_event(row.id, "performance_review", f"Разбор {row.kpi_type}", row.review_date,
+                      description=f"Причина: {row.reason}. Мера: {row.action}. {row.comment or ''}".strip(),
+                      event_value=days, value_label=f"{days:g} раб. дн." if days is not None else "Время не рассчитано",
+                      status="completed", source_type="kpi_drop", source_id=row.drop_id,
+                      metadata={"is_overtime": row.is_overtime})
+
+    elif key == "M3":
+        rows = (await db.execute(select(ManagerResponsibility).where(
+            ManagerResponsibility.manager_id == target.id,
+            ManagerResponsibility.date >= period_start,
+            ManagerResponsibility.date <= period_end,
+        ).order_by(ManagerResponsibility.date.desc()).limit(150))).scalars().all()
+        for row in rows:
+            points = float(row.points or 0)
+            add_event(row.id, row.event_type, row.event_type.replace("_", " ").title(), row.date,
+                      description=row.description, event_value=points, value_label=f"{points:+g} балла",
+                      status="positive" if points >= 0 else "negative", source_type="manager_action", source_id=row.source_id)
+
+    elif key == "M4":
+        rows = (await db.execute(select(AttentivenessLog).where(
+            AttentivenessLog.user_id == target.id,
+            AttentivenessLog.created_at >= period_start,
+            AttentivenessLog.created_at <= period_end,
+        ).order_by(AttentivenessLog.created_at.desc()).limit(150))).scalars().all()
+        for row in rows:
+            points = float(row.penalty_points or 0)
+            add_event(row.id, row.action_type, row.action_type.replace("_", " ").title(), row.created_at,
+                      description="Корректное управленческое действие" if row.success else "Ошибка обязательного поля",
+                      event_value=points, value_label=f"{points:+g} балла", status="success" if row.success else "error",
+                      source_type=row.action_type, source_id=row.action_id,
+                      metadata={"attempt_number": row.attempt_number, "is_overtime": row.is_overtime})
+
+    elif key == "M5":
+        rows = (await db.execute(select(EmployeeIdea).where(
+            EmployeeIdea.manager_id == target.id,
+            EmployeeIdea.created_at >= period_start,
+            EmployeeIdea.created_at <= period_end,
+        ).order_by(EmployeeIdea.created_at.desc()).limit(150))).scalars().all()
+        for row in rows:
+            reaction = float(row.reaction_percentage) if row.reaction_percentage is not None else None
+            add_event(row.id, "idea_review", row.description[:120], row.created_at,
+                      description=row.comment, event_value=reaction,
+                      value_label=f"{reaction:g}% за реакцию" if reaction is not None else "Ожидает решения",
+                      status=row.status, source_type="idea", source_id=row.id,
+                      metadata={"reaction_days": row.reaction_days, "decision": row.decision})
+
+    elif key == "M6":
+        rows = (await db.execute(select(ManagerOvertimeAction).where(
+            ManagerOvertimeAction.manager_id == target.id,
+            ManagerOvertimeAction.awarded_at >= period_start,
+            ManagerOvertimeAction.awarded_at <= period_end,
+        ).order_by(ManagerOvertimeAction.awarded_at.desc()).limit(150))).scalars().all()
+        for row in rows:
+            awarded = float(row.percent_awarded or 0)
+            add_event(row.id, row.action_type, row.action_type.replace("_", " ").title(), row.awarded_at,
+                      event_value=awarded, value_label=f"+{awarded:g}%", status="confirmed",
+                      source_type="manager_action", source_id=row.source_id)
+
+    elif key == "M7":
+        rows = (await db.execute(select(KPI7ReviewImpact, PerformanceReview).join(
+            PerformanceReview, PerformanceReview.id == KPI7ReviewImpact.review_id
+        ).where(
+            KPI7ReviewImpact.manager_id == target.id,
+            KPI7ReviewImpact.created_at >= period_start,
+            KPI7ReviewImpact.created_at <= period_end,
+        ).order_by(KPI7ReviewImpact.created_at.desc()).limit(150))).all()
+        for impact, review in rows:
+            points = float(impact.points or 0)
+            add_event(impact.id, "review_impact", f"Результат разбора {review.kpi_type}", impact.created_at,
+                      description=review.comment or f"Причина: {review.reason}. Мера: {review.action}.",
+                      event_value=points, value_label=f"{points:+g} балла",
+                      status="positive" if points >= 0 else "negative", source_type="performance_review", source_id=review.id)
+
+    events.sort(key=lambda item: item.occurred_at, reverse=True)
+    title, formula, unit = KPI_DETAIL_DEFINITIONS[key]
+    return KPIDetailOut(
+        user_id=target.id, user_name=target.name, kpi_key=key, title=title, formula=formula,
+        value=float(value) if value is not None else None, unit=unit,
+        period_start=period_start, period_end=period_end, events=events,
+    )
 
 
 # Helper to calculate working days (standard Mon-Fri 9:00 - 18:00)
@@ -617,7 +984,7 @@ def is_overtime_review(review_date: datetime) -> bool:
 
 
 @router.get("/kpi/drops/active", response_model=list[KPIDropOut])
-async def get_active_drops(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def get_active_drops(db: AsyncSession = Depends(get_db), user: User = Depends(require_kpi_access)):
     """Получить активные падения KPI сотрудников"""
     if user.role in {UserRole.OWNER, UserRole.DEPUTY_OWNER}:
         q = select(KPIDrop).where(KPIDrop.resolved == False).order_by(KPIDrop.drop_date.desc())
@@ -657,7 +1024,7 @@ async def get_active_drops(db: AsyncSession = Depends(get_db), user: User = Depe
     return out
 
 
-@router.post("/kpi/reviews", response_model=PerformanceReviewOut)
+@router.post("/kpi/reviews", response_model=PerformanceReviewOut, dependencies=[Depends(require_kpi_access)])
 async def submit_performance_review(
     data: PerformanceReviewCreate,
     db: AsyncSession = Depends(get_db),
@@ -930,7 +1297,7 @@ async def submit_performance_review(
 @router.get("/kpi/manager/details", response_model=ManagerKPIDetailsOut)
 async def get_manager_kpi_details(
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user)
+    user: User = Depends(require_kpi_access)
 ):
     """Получить детальные KPI показатели руководителя"""
     cache_key = f"manager_kpi_details:{user.id}"
@@ -1017,7 +1384,7 @@ async def get_manager_kpi_details(
     return res_out
 
 
-@router.post("/kpi/drops/simulate")
+@router.post("/kpi/drops/simulate", dependencies=[Depends(require_kpi_access)])
 async def simulate_kpi_drop(
     kpi_type: str,
     drop_value: float,
@@ -1112,7 +1479,7 @@ async def _build_kpi(db: AsyncSession, user_id: uuid.UUID, name: str, avatar_url
     # KPI1 по документу накопительный по всем финально принятым задачам.
     k1 = await kpi_calculator.calculate_kpi1_deadlines(db, user_id, datetime(2000, 1, 1), month_end)
     k2 = await kpi_calculator.calculate_kpi2_punctuality(db, user_id, month_start, month_end)
-    k3 = await kpi_calculator.calculate_kpi3_initiative(db, user_id, month_start, month_end)
+    k3 = await kpi_calculator.calculate_kpi3_initiative(db, user_id, two_week_start, now)
     k4 = await kpi_calculator.calculate_kpi4_overtime_load(db, user_id, month_start, month_end)
     k5 = await kpi_calculator.calculate_kpi5_quality(db, user_id, two_week_start, now)
     k8 = await kpi_calculator.calculate_kpi8_attentiveness(db, user_id, month_start, month_end)
@@ -1204,9 +1571,8 @@ async def _build_kpi(db: AsyncSession, user_id: uuid.UUID, name: str, avatar_url
 # ===================== LEADERBOARD =====================
 
 @router.get("/leaderboard", response_model=list[LeaderboardEntry])
-async def leaderboard(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    is_admin = user.role in ADMIN_ROLES
-    cache_key = f"leaderboard:{is_admin}"
+async def leaderboard(db: AsyncSession = Depends(get_db), user: User = Depends(require_leaderboard_access)):
+    cache_key = f"leaderboard:kpi:{user.id}:{user.role.value}:{user.department_id or '-'}"
     cached_data = kpi_cache.get(cache_key)
     if cached_data is not None:
         return cached_data
@@ -1220,15 +1586,24 @@ async def leaderboard(db: AsyncSession = Depends(get_db), user: User = Depends(g
     month_ago = now - timedelta(days=30)
     year_ago = now - timedelta(days=365)
 
-    # All users (or only interns for non-admins)
-    q = select(User)
-    if user.role not in ADMIN_ROLES:
-        q = q.where(User.training_role == "intern")
+    # Visibility follows the same hierarchy as KPI cards.
+    q = select(User).where(User.status == UserStatus.ACTIVE)
+    if user.role == UserRole.ADMIN:
+        visible_scopes = [User.manager_id == user.id, User.id == user.id]
+        if user.department_id:
+            visible_scopes.append(
+                (User.department_id == user.department_id)
+                & User.role.notin_([UserRole.OWNER, UserRole.DEPUTY_OWNER])
+            )
+        q = q.where(or_(*visible_scopes))
+    elif user.role not in {UserRole.OWNER, UserRole.DEPUTY_OWNER}:
+        q = q.where(User.id == user.id)
     result = await db.execute(q.order_by(User.name))
     users_list = result.scalars().all()
 
     entries: list[LeaderboardEntry] = []
     for u in users_list:
+        kpi_snapshot = await _build_kpi(db, u.id, u.name, u.avatar_url)
         balance = await get_coin_balance(db, u.id)
         completed = await db.execute(
             select(func.count()).where(TopicProgress.user_id == u.id, TopicProgress.status == "completed")
@@ -1336,6 +1711,10 @@ async def leaderboard(db: AsyncSession = Depends(get_db), user: User = Depends(g
 
         entries.append(LeaderboardEntry(
             rank=0, user_id=u.id, user_name=u.name, avatar_url=u.avatar_url,
+            role=u.role.value, department_id=u.department_id,
+            general_score=kpi_snapshot.general_score,
+            occupational_score=kpi_snapshot.occupational_score,
+            overall_score=kpi_snapshot.overall_score,
             coins_balance=float(balance), topics_completed=topics_done,
             avg_test_score=avg_score, total_time_hours=round(total_minutes / 60, 1),
             tasks_assigned=tasks_assigned, tasks_completed_day=tasks_completed_day,
@@ -1345,9 +1724,14 @@ async def leaderboard(db: AsyncSession = Depends(get_db), user: User = Depends(g
             anti_cheat_score=anti_score, anti_cheat_flags=anti_flags,
         ))
 
-    # Sort by anti-cheat adjusted coins, then weekly task output.
+    # KPI is the only ranking criterion. Null values remain at the bottom.
+    entries.sort(key=lambda entry: entry.user_name.lower())
     entries.sort(
-        key=lambda e: (e.coins_balance * (e.anti_cheat_score / 100.0), e.tasks_completed_week),
+        key=lambda e: (
+            e.overall_score is not None,
+            e.overall_score if e.overall_score is not None else -1,
+            e.general_score if e.general_score is not None else -1,
+        ),
         reverse=True,
     )
     for i, e in enumerate(entries):
@@ -1386,7 +1770,7 @@ async def set_section_access(user_id: uuid.UUID, data: SectionAccessGrant, db: A
 
 
 @router.get("/access/{user_id}", response_model=UserSectionAccessOut)
-async def get_section_access(user_id: uuid.UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def get_section_access(user_id: uuid.UUID, db: AsyncSession = Depends(get_db), user: User = Depends(require_admin)):
     target = await db.get(User, user_id)
     if not target:
         raise HTTPException(404, "Пользователь не найден")
@@ -1587,10 +1971,10 @@ async def get_department_kpi_health(
 @router.get("/admin/manager-reactivity", response_model=list[ManagerReactivityOut])
 async def get_manager_reactivity(
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin)
+    admin: User = Depends(require_company_access)
 ) -> list[ManagerReactivityOut]:
     """Получить показатели оперативности реагирования и дисциплины руководителей"""
-    cache_key = "admin_manager_reactivity"
+    cache_key = f"admin_manager_reactivity:{admin.id}:{admin.department_id or '-'}"
     cached_data = kpi_cache.get(cache_key)
     if cached_data is not None:
         return cached_data
@@ -1600,12 +1984,19 @@ async def get_manager_reactivity(
 
     # Находим всех менеджеров/админов
     manager_ids = select(User.manager_id).where(User.manager_id != None)
-    managers_res = await db.execute(
-        select(User).where(or_(
-            User.role.in_([UserRole.ADMIN, UserRole.OWNER, UserRole.DEPUTY_OWNER]),
-            User.id.in_(manager_ids),
-        ))
-    )
+    managers_query = select(User).where(or_(
+        User.role.in_([UserRole.ADMIN, UserRole.OWNER, UserRole.DEPUTY_OWNER]),
+        User.id.in_(manager_ids),
+    ))
+    if admin.role == UserRole.ADMIN:
+        manager_visibility = [User.id == admin.id, User.manager_id == admin.id]
+        if admin.department_id:
+            manager_visibility.append(
+                (User.department_id == admin.department_id)
+                & User.role.notin_([UserRole.OWNER, UserRole.DEPUTY_OWNER])
+            )
+        managers_query = managers_query.where(or_(*manager_visibility))
+    managers_res = await db.execute(managers_query)
     managers = managers_res.scalars().all()
 
     from app.services import kpi_calculator

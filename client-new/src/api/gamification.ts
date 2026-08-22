@@ -120,6 +120,33 @@ export interface UserKPI {
   manager_kpi7_department_control: number | null;
 }
 
+export interface KPIDetailEvent {
+  id: string;
+  event_type: string;
+  title: string;
+  description: string | null;
+  value: number | null;
+  value_label: string | null;
+  status: string | null;
+  occurred_at: string;
+  source_type: string | null;
+  source_id: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface KPIDetail {
+  user_id: string;
+  user_name: string;
+  kpi_key: string;
+  title: string;
+  formula: string;
+  value: number | null;
+  unit: string;
+  period_start: string;
+  period_end: string;
+  events: KPIDetailEvent[];
+}
+
 export interface WeeklyReport {
   id: string;
   employee_id: string;
@@ -155,6 +182,11 @@ export interface LeaderboardEntry {
   user_id: string;
   user_name: string;
   avatar_url: string | null;
+  role: string;
+  department_id: string | null;
+  general_score: number | null;
+  occupational_score: number | null;
+  overall_score: number | null;
   coins_balance: number;
   topics_completed: number;
   avg_test_score: number;
@@ -222,6 +254,14 @@ export const gamificationApi = {
     api.get<UserKPI>('/gamification/kpi/me'),
   getUserKPI: (userId: string) =>
     api.get<UserKPI>(`/gamification/kpi/user/${encodeURIComponent(userId)}`),
+  getKPIDetails: (kpiKey: string, userId?: string | null, dateFrom?: string, dateTo?: string) => {
+    const params = new URLSearchParams();
+    if (userId) params.set('user_id', userId);
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
+    const query = params.toString();
+    return api.get<KPIDetail>(`/gamification/kpi/details/${encodeURIComponent(kpiKey)}${query ? `?${query}` : ''}`);
+  },
   getMyWeeklyReport: () =>
     api.get<WeeklyReport>('/gamification/kpi/reports/me', { _silentGlobalError: true } as any),
   saveMyWeeklyReport: (data: { criteria: Record<string, string>; initiative_sphere?: string | null }) =>
